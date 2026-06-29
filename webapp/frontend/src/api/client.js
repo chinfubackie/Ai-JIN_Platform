@@ -81,6 +81,45 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // ── Database / Projects ──
+  dbStats: () => fetchJSON('/db/stats'),
+  activity: (limit = 20) => fetchJSON(`/activity?limit=${limit}`),
+
+  projects: () => fetchJSON('/projects'),
+  projectGet: (id) => fetchJSON(`/projects/${id}`),
+  projectCreate: (data) =>
+    fetchJSON('/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  projectUpdate: (id, data) =>
+    fetchJSON(`/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  projectDelete: (id) =>
+    fetchJSON(`/projects/${id}`, { method: 'DELETE' }),
+  projectSync: (id) =>
+    fetchJSON(`/projects/${id}/sync`, { method: 'POST' }),
+  projectClasses: (pid) => fetchJSON(`/projects/${pid}/classes`),
+  projectClassCreate: (pid, data) =>
+    fetchJSON(`/projects/${pid}/classes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  classDelete: (cid) =>
+    fetchJSON(`/classes/${cid}`, { method: 'DELETE' }),
+
+  runs: (projectId) => fetchJSON(`/runs${projectId ? `?project_id=${projectId}` : ''}`),
+  runGet: (rid) => fetchJSON(`/runs/${rid}`),
+
+  registry: (projectId) => fetchJSON(`/registry${projectId ? `?project_id=${projectId}` : ''}`),
+  registryDeploy: (mid) =>
+    fetchJSON(`/registry/${mid}/deploy`, { method: 'POST' }),
+
   // LM Assistant (Ollama)
   lmModels: () => fetchJSON('/lm/models'),
   lmChat: (payload) =>

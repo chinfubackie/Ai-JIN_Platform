@@ -26,13 +26,19 @@ const HEALTH_COLORS = ['var(--green)', 'var(--yellow)', 'var(--red)']
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
+  const [dbStats, setDbStats] = useState(null)
   const [folders, setFolders] = useState([])
+  const [projects, setProjects] = useState([])
 
   useEffect(() => {
     api.stats().then(setStats).catch(console.error)
+    api.dbStats().then(setDbStats).catch(() => {})
     api.folders().then(data => {
       setFolders(Array.isArray(data) ? data : data?.folders || [])
     }).catch(() => setFolders([]))
+    api.projects().then(data => {
+      setProjects(Array.isArray(data) ? data : [])
+    }).catch(() => {})
   }, [])
 
   if (!stats) {
@@ -45,50 +51,53 @@ export default function Dashboard() {
   }
 
   const ds = stats.dataset || {}
-  const trainingRuns = stats.training?.runs || stats.training_runs || []
-  const totalImages = ds.total_images || stats.total_images || 0
-  const classes = ds.classes || stats.classes || {}
-  const totalClasses = typeof classes === 'object' ? Object.keys(classes).length : (Array.isArray(classes) ? classes.length : 0)
-  const totalModels = trainingRuns.length
-  const totalAnnotations = ds.total_labels || stats.total_annotations || 0
-  const totalExports = stats.total_exports || 0
+  const trainingRuns = stats.training?.runs || []
+  // Prefer DB stats when available
+  const totalImages   = dbStats?.total_images   ?? ds.total_images   ?? 0
+  const totalAnnotations = dbStats?.total_annotations ?? ds.total_labels ?? 0
+  const totalModels   = dbStats?.total_models   ?? trainingRuns.length
+  const totalClasses  = dbStats?.total_classes  ?? Object.keys(ds.classes || {}).length
+  const labelRate     = dbStats?.label_rate     ?? 0
+  const totalProjects = dbStats?.total_projects ?? projects.length
 
-  // Dataset health mock data (derived from stats if available)
-  const healthValid = stats.health_valid ?? 95
-  const healthWarnings = stats.health_warnings ?? 4
-  const healthErrors = stats.health_errors ?? 1
+  const labeledImages = dbStats?.labeled_images ?? 0
+
+  const healthValid    = labelRate
+  const healthWarnings = Math.max(0, 100 - labelRate - 1)
+  const healthErrors   = Math.min(1, 100 - labelRate)
   const healthData = [
-    { name: 'ถูกต้อง', value: healthValid },
-    { name: 'คำเตือน', value: healthWarnings },
-    { name: 'ข้อผิดพลาด', value: healthErrors },
+    { name: 'Labeled', value: healthValid },
+    { name: 'Unlabeled', value: healthWarnings },
+    { name: 'Error', value: healthErrors },
   ]
 
-  // Activity feed
-  const activities = stats.recent_activity || [
-    { icon: 'annotate', text: 'คุณ annotate ภาพ 23 ภาพ', time: '2 นาทีที่แล้ว' },
-    { icon: 'ai', text: 'AI-JIN แนะนำ annotation 128 รายการ', time: '12 นาทีที่แล้ว' },
-    { icon: 'train', text: 'เริ่มเทรนโมเดล YOLOv8x', time: '1 ชม.ที่แล้ว' },
-    { icon: 'export', text: 'ส่งออกโมเดลเป็น ONNX สำเร็จ', time: '3 ชม.ที่แล้ว' },
-  ]
+  // Activity feed from DB
+  const activities = (dbStats?.activity || []).map(a => ({
+    icon: a.event_type,
+    text: a.title,
+    time: timeAgo(a.created_at),
+  }))
 
   const quickStats = [
-    { label: 'ชุดข้อมูล', value: folders.length, icon: FolderOpen, color: 'var(--accent)', growth: `+${Math.max(1, Math.floor(folders.length * 0.2))}` },
-    { label: 'รูปภาพ', value: totalImages, icon: Image, color: 'var(--cyan)', growth: `+${Math.max(1, Math.floor(totalImages * 0.05))}` },
-    { label: 'Annotations', value: totalAnnotations, icon: Tag, color: 'var(--green)', growth: `+${Math.max(1, Math.floor(totalAnnotations * 0.1))}` },
-    { label: 'โมเดล', value: totalModels, icon: Box, color: 'var(--yellow)', growth: `+${Math.max(1, Math.floor(totalModels * 0.3))}` },
-    { label: 'การส่งออก', value: totalExports, icon: Download, color: 'var(--red)', growth: `+${Math.max(1, Math.floor(totalExports * 0.15))}` },
+    { label: 'โปรเจกต์', value: totalProjects, icon: FolderOpen, color: 'var(--accent)', sub: `${projects.length} active` },
+    { label: 'รูปภาพ', value: totalImages, icon: Image, color: 'var(--cyan)', sub: `${labeledImages} labeled` },
+    { label: 'Annotations', value: totalAnnotations, icon: Tag, color: 'var(--green)', sub: `${labelRate}% rate` },
+    { label: 'Classes', value: totalClasses, icon: Box, color: 'var(--yellow)', sub: 'ทั้งหมด' },
+    { label: 'โมเดล', value: totalModels, icon: Download, color: 'var(--red)', sub: `${dbStats?.deployed_models ?? 0} deployed` },
   ]
 
   const displayFolders = folders.slice(0, 6)
 
-  // Recent projects derived from training runs
-  const recentProjects = trainingRuns.slice(0, 3).map((run, i) => ({
-    name: run.name || `โปรเจกต์ ${i + 1}`,
+  // Recent projects from DB
+  const recentProjects = projects.slice(0, 3).map((p, i) => ({
+    name: p.name,
     type: 'Object Detection',
-    progress: run.has_best ? 100 : 50,
-    updated: `${i + 1} ชม.ที่แล้ว`,
-    initial: (run.name || 'P')[0].toUpperCase(),
+    progress: p.image_count > 0 ? Math.round((p.labeled_count || 0) / p.image_count * 100) : 0,
+    updated: timeAgo(p.updated_at),
+    initial: (p.name || 'P')[0].toUpperCase(),
     color: ['var(--accent)', 'var(--cyan)', 'var(--green)'][i % 3],
+    classes: p.class_count || 0,
+    images: p.image_count || 0,
   }))
 
   return (
@@ -169,7 +178,7 @@ export default function Dashboard() {
               </div>
               <div className="dash-stat-number">{s.value.toLocaleString()}</div>
               <div className="dash-stat-label">{s.label}</div>
-              <div className="dash-stat-growth">{s.growth} เดือนนี้</div>
+              <div className="dash-stat-growth">{s.sub}</div>
             </div>
           )
         })}

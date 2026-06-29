@@ -9,6 +9,7 @@ import time
 import base64
 import csv
 from pathlib import Path
+import db as _db
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB upload limit
@@ -149,6 +150,137 @@ def index():
 
 @app.route("/healthz")
 def healthz():
+    return jsonify({"ok": True})
+
+
+# ── API: Projects ─────────────────────────────────────────────────────
+@app.route("/api/projects", methods=["GET"])
+def api_projects_list():
+    return jsonify(_db.project_list())
+
+
+@app.route("/api/projects", methods=["POST"])
+def api_projects_create():
+    data = request.json or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "name required"}), 400
+    try:
+        pid = _db.project_create(
+            name,
+            description=data.get("description", ""),
+            dataset_dir=data.get("dataset_dir", ""))
+        return jsonify({"ok": True, "id": pid})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@app.route("/api/projects/<int:pid>", methods=["GET"])
+def api_projects_get(pid):
+    p = _db.project_get(pid)
+    if not p:
+        return jsonify({"error": "not found"}), 404
+    p["classes"] = _db.class_list(pid)
+    p["stats"] = _db.image_stats(pid)
+    p["recent_runs"] = _db.run_list(project_id=pid, limit=5)
+    return jsonify(p)
+
+
+@app.route("/api/projects/<int:pid>", methods=["PATCH"])
+def api_projects_update(pid):
+    data = request.json or {}
+    allowed = {"name", "description", "dataset_dir"}
+    kwargs = {k: v for k, v in data.items() if k in allowed}
+    _db.project_update(pid, **kwargs)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/projects/<int:pid>", methods=["DELETE"])
+def api_projects_delete(pid):
+    _db.project_delete(pid)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/projects/<int:pid>/sync", methods=["POST"])
+def api_projects_sync(pid):
+    """Scan dataset dir on disk and register images in DB."""
+    p = _db.project_get(pid)
+    if not p:
+        return jsonify({"error": "not found"}), 404
+    dataset_dir = p.get("dataset_dir") or ""
+    if dataset_dir:
+        added = _db.sync_images_from_disk(pid, dataset_dir)
+    else:
+        # Default: scan auto_improve under global DATASET
+        added = _db.sync_images_from_disk(pid, str(DATASET / "auto_improve"))
+    return jsonify({"ok": True, "synced": added})
+
+
+# ── API: Classes ──────────────────────────────────────────────────────
+@app.route("/api/projects/<int:pid>/classes", methods=["GET"])
+def api_classes_list(pid):
+    return jsonify(_db.class_list(pid))
+
+
+@app.route("/api/projects/<int:pid>/classes", methods=["POST"])
+def api_classes_create(pid):
+    data = request.json or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "name required"}), 400
+    cid = _db.class_upsert(pid, name, color=data.get("color"))
+    return jsonify({"ok": True, "id": cid})
+
+
+@app.route("/api/classes/<int:cid>", methods=["DELETE"])
+def api_classes_delete(cid):
+    _db.class_delete(cid)
+    return jsonify({"ok": True})
+
+
+# ── API: DB Stats ─────────────────────────────────────────────────────
+@app.route("/api/db/stats")
+def api_db_stats():
+    stats = _db.db_stats()
+    stats["activity"] = _db.activity_list(limit=10)
+    stats["recent_runs"] = _db.run_list(limit=5)
+    return jsonify(stats)
+
+
+# ── API: Activity ─────────────────────────────────────────────────────
+@app.route("/api/activity")
+def api_activity():
+    limit = int(request.args.get("limit", 20))
+    project_id = request.args.get("project_id")
+    pid = int(project_id) if project_id else None
+    return jsonify(_db.activity_list(limit=limit, project_id=pid))
+
+
+# ── API: Training Runs (DB) ───────────────────────────────────────────
+@app.route("/api/runs")
+def api_runs_list():
+    project_id = request.args.get("project_id")
+    pid = int(project_id) if project_id else None
+    return jsonify(_db.run_list(project_id=pid))
+
+
+@app.route("/api/runs/<int:rid>")
+def api_runs_get(rid):
+    r = _db.run_get(rid)
+    return jsonify(r) if r else (jsonify({"error": "not found"}), 404)
+
+
+# ── API: Models Registry (DB) ─────────────────────────────────────────
+@app.route("/api/registry")
+def api_registry_list():
+    project_id = request.args.get("project_id")
+    pid = int(project_id) if project_id else None
+    return jsonify(_db.model_list(project_id=pid))
+
+
+@app.route("/api/registry/<int:mid>/deploy", methods=["POST"])
+def api_registry_deploy(mid):
+    _db.model_deploy(mid)
     return jsonify({"ok": True})
 
 
@@ -464,6 +596,7 @@ def api_train_stream():
 def api_train_start():
     config = request.json or {}
     model = config.get("model", "yolo11n.pt")
+    run_name = config.get("name", f"train_{time.strftime('%Y%m%d_%H%M')}")
     body = {
         "command": "train",
         "model": model,
@@ -473,10 +606,24 @@ def api_train_start():
             "epochs": int(config.get("epochs", 100)),
             "imgsz": int(config.get("imgsz", 640)),
             "batch": int(config.get("batch", 16)),
-            "name": config.get("name", f"train_{time.strftime('%Y%m%d_%H%M')}"),
+            "name": run_name,
         },
     }
-    return jsonify(yolo_post(body))
+    result = yolo_post(body)
+    # Record in DB
+    try:
+        pid = config.get("project_id")
+        _db.run_create(
+            run_name,
+            project_id=int(pid) if pid else None,
+            model_base=model,
+            epochs=int(config.get("epochs", 100)),
+            batch=int(config.get("batch", 16)),
+            imgsz=int(config.get("imgsz", 640)),
+        )
+    except Exception:
+        pass
+    return jsonify(result)
 
 
 @app.route("/api/train/export", methods=["POST"])
@@ -532,8 +679,26 @@ def api_models():
             models.append(info)
 
     active_best = MODEL_DIR / "best.pt"
+
+    # Sync discovered models into DB
+    try:
+        existing_paths = {m["path"] for m in _db.model_list()}
+        for m in models:
+            if m.get("best_pt") and m["best_pt"] not in existing_paths:
+                _db.model_register(
+                    name=m.get("run", "model"),
+                    path=m["best_pt"],
+                    fmt="pt",
+                    size_bytes=int((m.get("best_size_mb", 0)) * 1e6),
+                    map50=m.get("mAP50", 0) or 0,
+                    map50_95=m.get("mAP50_95", 0) or 0,
+                )
+    except Exception:
+        pass
+
     return jsonify({
         "models": models,
+        "registry": _db.model_list(),
         "active": {
             "active_model": str(active_best) if active_best.exists() else None,
             "active_size_mb": round(active_best.stat().st_size / 1e6, 1) if active_best.exists() else 0,
@@ -837,11 +1002,13 @@ def api_label_ext(filepath):
 
 @app.route("/api/label/ext/save", methods=["POST"])
 def api_label_ext_save():
-    """Save boxes and polygons in YOLO format (same file)."""
+    """Save boxes and polygons in YOLO format (file) + DB."""
     data     = request.json or {}
     img_rel  = data.get("image_path", "")
     boxes    = data.get("boxes", [])    # [[cid, cx, cy, w, h], ...]
     polygons = data.get("polygons", []) # [{class_id, pts:[[nx,ny],...]}]
+    project_id = data.get("project_id")  # optional — sync to DB if provided
+    classes    = data.get("classes", []) # list of class names
 
     img_path = _safe_path(DATASET, img_rel)
     if not img_path.exists():
@@ -859,6 +1026,34 @@ def api_label_ext_save():
         lines.append(f"{p['class_id']} {flat}")
 
     label_file.write_text("\n".join(lines) + "\n" if lines else "")
+
+    # ── Write to DB if project_id supplied ──
+    if project_id:
+        try:
+            pid = int(project_id)
+            # Ensure classes exist
+            for i, cname in enumerate(classes):
+                _db.class_upsert(pid, cname, class_idx=i)
+            # Upsert image record
+            img_id = _db.image_upsert(pid, img_rel, img_path.name)
+            # Build ann list
+            ann_list = []
+            for b in boxes:
+                ann_list.append({
+                    "class_id": b[0], "type": "box",
+                    "data": {"cx": b[1], "cy": b[2], "w": b[3], "h": b[4]},
+                })
+            for p in polygons:
+                ann_list.append({
+                    "class_id": p["class_id"], "type": "polygon",
+                    "data": {"pts": p["pts"]},
+                })
+            _db.annotation_save(img_id, ann_list)
+        except Exception as exc:
+            # DB write failure is non-fatal
+            return jsonify({"ok": True, "boxes": len(boxes), "polygons": len(polygons),
+                            "db_warning": str(exc)})
+
     return jsonify({"ok": True, "boxes": len(boxes), "polygons": len(polygons)})
 
 
@@ -1028,6 +1223,9 @@ def api_lm_chat_stream():
 
 
 # ── Run ──────────────────────────────────────────────────────────────
+# Initialise database on import (works for both __main__ and gunicorn)
+_db.init_db()
+
 if __name__ == "__main__":
     print("=" * 50)
     print("  Ai-JIN Platform Dashboard")
@@ -1035,5 +1233,6 @@ if __name__ == "__main__":
     print(f"  Label Studio: {LS_URL}")
     print(f"  YOLO Train:   {YOLO_URL}")
     print(f"  Dataset:      {DATASET}")
+    print(f"  Database:     {_db.DB_PATH}")
     print("=" * 50)
     app.run(host="0.0.0.0", port=8501, debug=False)

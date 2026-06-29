@@ -80,7 +80,13 @@ export default function Training() {
   // Fetch initial status + models
   useEffect(() => {
     api.trainStatus().then(setStatus).catch(() => {})
-    api.models().then(d => setModels(d?.models || d || [])).catch(() => {})
+    // Load from DB registry first, fall back to file scan
+    api.runs().then(dbRuns => {
+      if (dbRuns?.length) setModels(dbRuns)
+      else api.models().then(d => setModels(d?.models || d || [])).catch(() => {})
+    }).catch(() => {
+      api.models().then(d => setModels(d?.models || d || [])).catch(() => {})
+    })
   }, [])
 
   // Poll during training
