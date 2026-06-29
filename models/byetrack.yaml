@@ -1,0 +1,14 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# Default Ultralytics settings for ByteTrack tracker when using mode="track"
+# For documentation and examples see https://docs.ultralytics.com/modes/track/
+# For ByteTrack source code see https://github.com/ifzhang/ByteTrack
+
+tracker_type: bytetrack # tracker type, ['botsort', 'bytetrack']
+track_high_thresh: 0.75 # (float) First-stage match threshold; higher = cleaner tracks, fewer ID swaps
+track_low_thresh: 0.30 # (float) Second-stage threshold; higher = more selective low-score recovery
+new_track_thresh: 0.55 # (float) Start a new track only if ≥ this; HIGHER reduces false new IDs
+track_buffer: 45 # (int) Frames to keep lost tracks alive; HIGHER stabilizes IDs through brief overlap
+match_thresh: 0.85 # (float) IoU match threshold; HIGHER = stricter match, fewer ID switches
+fuse_score: True # Whether to fuse confidence scores with the iou distances before matching
+# min_box_area: 10  # threshold for min box areas(for tracker evaluation, not used for now)

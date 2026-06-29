@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ai-JIN Platform</title>
+<style>
+:root{--bg:#0f1117;--bg2:#1a1d27;--bg3:#252836;--border:#2e3142;--text:#e4e6f0;--text2:#9498b0;--accent:#25c8f6;--accent2:#6c63ff;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--radius:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
+.sidebar{width:210px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-brand{padding:20px;text-align:center;border-bottom:1px solid var(--border)}
+.sidebar-brand h1{font-size:22px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sidebar-brand small{color:var(--text2);font-size:11px}
+.nav-items{flex:1;padding:12px 0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:12px 20px;cursor:pointer;color:var(--text2);transition:all .2s;font-size:14px;border-left:3px solid transparent}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(37,200,246,.08)}
+.nav-item .icon{font-size:18px;width:24px;text-align:center}
+.sidebar-footer{padding:16px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)}
+.sidebar-footer .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.dot.on{background:var(--green)}.dot.off{background:var(--red)}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{padding:14px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--bg2)}
+.topbar h2{font-size:18px;font-weight:600}
+.content{flex:1;overflow-y:auto;padding:24px}
+.page{display:none}.page.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+.card-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.card-value{font-size:26px;font-weight:700}
+.card-sub{font-size:11px;color:var(--text2);margin-top:4px}
+.card-value.green{color:var(--green)}.card-value.amber{color:var(--amber)}.card-value.accent{color:var(--accent)}
+.btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-size:13px;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--border)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}.btn-primary:hover{background:#1eb8e0}
+.btn-green{background:var(--green);color:#fff;border-color:var(--green)}
+.btn-amber{background:var(--amber);color:#000;border-color:var(--amber)}
+.btn-red{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+table{width:100%;border-collapse:collapse}
+th{background:var(--bg3);padding:10px 14px;text-align:left;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+td{padding:10px 14px;border-top:1px solid var(--border);font-size:13px}
+tr:hover td{background:rgba(37,200,246,.04)}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:11px;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none}
+.form-group input:focus,.form-group select:focus{border-color:var(--accent)}
+.form-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.img-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .2s}
+.img-card:hover{border-color:var(--accent)}
+.img-card img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.img-card .img-info{padding:6px 8px;font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pagination{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:14px}
+.progress-bar{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;transition:width .5s}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.panel h3{font-size:14px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.badge-green{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-accent{background:rgba(37,200,246,.15);color:var(--accent)}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;justify-content:center;align-items:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);width:90%;max-width:850px;max-height:85vh;overflow:auto}
+.modal-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-body{padding:18px}
+.ls-frame{width:100%;height:calc(100vh - 150px);border:none;border-radius:var(--radius);background:var(--bg2)}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px 20px;font-size:13px;z-index:200;transform:translateY(80px);opacity:0;transition:all .3s}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{border-color:var(--green)}.toast.error{border-color:var(--red)}
+.dropzone{border:2px dashed var(--border);border-radius:var(--radius);padding:40px;text-align:center;cursor:pointer;transition:all .3s;background:var(--bg3)}
+.dropzone:hover,.dropzone.drag{border-color:var(--accent);background:rgba(37,200,246,.05)}
+.dropzone .dz-icon{font-size:48px;margin-bottom:12px}
+.dropzone p{color:var(--text2);font-size:14px}
+code{background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:12px;color:var(--accent)}
+pre{background:var(--bg3);padding:16px;border-radius:8px;overflow-x:auto;font-size:12px;line-height:1.6;color:var(--text);border:1px solid var(--border)}
+.tab-bar{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab-btn{padding:10px 20px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:13px;border-bottom:2px solid transparent;transition:all .2s}
+.tab-btn:hover{color:var(--text)}.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.detect-box{position:absolute;border:2px solid;pointer-events:none;font-size:11px;font-weight:600;padding:1px 4px}
+.dataset-platform{margin:-24px;background:#f7f8fb;color:#111827;min-height:calc(100vh - 57px);display:grid;grid-template-columns:292px 1fr;font-family:Inter,'Segoe UI',system-ui,sans-serif}
+.dataset-platform *{letter-spacing:0}
+.dataset-rail{background:#fff;border-right:1px solid #e5e7eb;padding:18px 20px;display:flex;flex-direction:column;gap:14px;min-height:calc(100vh - 57px)}
+.dataset-brand{display:flex;align-items:center;gap:10px;font-size:27px;font-weight:800;color:#1237b9;margin-bottom:4px}
+.dataset-mark{width:38px;height:26px;border-radius:20px;background:linear-gradient(135deg,#1455ff,#08b8df);position:relative;display:inline-block}
+.dataset-mark:before{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:#101bb7;left:-2px;bottom:0}
+.dataset-search{height:44px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;display:flex;align-items:center;gap:10px;padding:0 12px;color:#6b7280;box-shadow:0 2px 8px rgba(15,23,42,.04)}
+.dataset-search input{border:0;outline:0;flex:1;font-size:15px;background:transparent;color:#111827}
+.dataset-kbd{font-size:12px;border:1px solid #e5e7eb;background:#f9fafb;border-radius:5px;padding:3px 8px;color:#6b7280}
+.dataset-rail-section{font-size:13px;color:#6b7280;margin-top:10px}
+.dataset-rail-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:9px;color:#111827;font-size:15px;cursor:pointer}
+.dataset-rail-item.active,.dataset-rail-item:hover{background:#f3f4f6}
+.dataset-folder-stack{display:flex;flex-direction:column;gap:6px;margin-left:12px;border-left:1px solid #e5e7eb;padding-left:16px;max-height:260px;overflow:auto}
+.dataset-folder-item{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;color:#374151;font-size:14px;cursor:pointer;min-width:0}
+.dataset-folder-item.active{background:#eef2ff;color:#1539c7;font-weight:700}
+.dataset-folder-dot{width:25px;height:25px;border-radius:7px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:12px;flex:none}
+.dataset-user{margin-top:auto;display:flex;align-items:center;gap:9px;border-top:1px solid #eef0f3;padding-top:14px}
+.dataset-avatar,.dataset-hero-avatar{background:linear-gradient(135deg,#38184f,#f97316);color:#fff;display:grid;place-items:center;font-weight:800;overflow:hidden}
+.dataset-avatar{width:40px;height:40px;border-radius:8px}.dataset-hero-avatar{width:82px;height:82px;border-radius:18px;font-size:24px}
+.dataset-main{padding:22px 28px 32px;overflow:auto}
+.dataset-topline{height:42px;display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.dataset-breadcrumb{display:flex;align-items:center;gap:16px;font-size:17px;color:#111827}
+.dataset-wallet{display:flex;align-items:center;gap:14px;color:#111827;font-size:14px}
+.dataset-layout{display:grid;grid-template-columns:minmax(0,1fr) 480px;gap:20px;margin-bottom:30px}
+.dataset-hero{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:30px;box-shadow:0 12px 26px rgba(15,23,42,.08)}
+.dataset-hero-head{display:flex;align-items:center;gap:20px;margin-bottom:32px}
+.dataset-hero h2{font-size:28px;line-height:1.15;margin:0;color:#030712}
+.dataset-hero p{margin:7px 0 0;color:#6b7280;font-size:16px}
+.dataset-plan{display:inline-flex;margin-left:8px;padding:4px 10px;border-radius:999px;background:#f3f4f6;color:#111827;font-size:13px;font-weight:700}
+.dataset-stat-row{display:flex;gap:14px;flex-wrap:wrap}
+.dataset-stat-pill{min-width:149px;height:65px;border:1px solid #e5e7eb;border-radius:15px;display:flex;align-items:center;gap:13px;padding:0 16px;background:#fff}
+.dataset-stat-pill svg{width:22px;height:22px;color:#6b7280}.dataset-stat-pill strong{display:block;font-size:20px;color:#111827}.dataset-stat-pill span{font-size:14px;color:#6b7280}
+.dataset-video{border-radius:16px;min-height:325px;background:radial-gradient(circle at 25% 35%,#b5e4ff 0,#172363 36%,#020617 76%);box-shadow:0 9px 19px rgba(0,0,0,.18);position:relative;overflow:hidden;color:#fff;padding:24px}
+.dataset-video:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.28),transparent 30%,rgba(13,20,65,.15))}
+.dataset-video-title{position:relative;font-size:26px;font-weight:800;max-width:350px}.dataset-video-brand{position:relative;margin-top:6px;font-size:14px;font-weight:700}
+.dataset-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:86px;height:60px;border-radius:15px;background:#f00;display:grid;place-items:center;box-shadow:0 18px 45px rgba(0,0,0,.26)}
+.dataset-play:before{content:'';border-left:23px solid #fff;border-top:15px solid transparent;border-bottom:15px solid transparent;margin-left:5px}
+.dataset-quick{position:absolute;left:32px;bottom:27px;font-size:38px;font-weight:800;color:#d9ffd8}
+.dataset-panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 496px;gap:20px}
+.dataset-card-panel{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:30px;box-shadow:0 2px 10px rgba(15,23,42,.04)}
+.dataset-panel-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}
+.dataset-panel-title{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:800;color:#111827}.dataset-panel-icon{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;background:#dcfce7;color:#22c55e}
+.dataset-black-btn{border:0;border-radius:10px;background:#141414;color:#fff;font-size:16px;font-weight:800;padding:11px 17px;display:inline-flex;align-items:center;gap:9px;cursor:pointer}
+.dataset-muted{color:#6b7280;font-size:15px}
+.dataset-drop{border:2px dashed #d1d5db;border-radius:18px;min-height:110px;margin:28px 0 16px;display:grid;place-items:center;text-align:center;color:#6b7280;padding:18px}
+.dataset-drop strong{display:block;font-weight:500;color:#6b7280;margin-top:6px}.dataset-drop small{display:block;margin-top:8px;font-size:12px}
+.dataset-mini-list{display:flex;flex-direction:column;gap:10px;margin-top:14px}.dataset-mini-card{border:1px solid #e5e7eb;border-radius:14px;background:#fff;display:flex;align-items:center;gap:14px;padding:14px;box-shadow:0 2px 8px rgba(15,23,42,.06);cursor:pointer}
+.dataset-mini-icon{width:50px;height:50px;border-radius:10px;background:#f43f5e;color:#fff;display:grid;place-items:center;font-weight:800;font-size:20px;flex:none}.dataset-mini-card strong{font-size:18px;color:#111827}.dataset-mini-card span{color:#6b7280;font-size:14px}
+.dataset-feature-card{height:84px;border-radius:13px;overflow:hidden;background:#111827;position:relative;color:#fff;display:flex;align-items:flex-end;padding:12px 16px;margin-top:16px;box-shadow:0 3px 12px rgba(0,0,0,.16)}
+.dataset-feature-strip{position:absolute;inset:0;display:grid;grid-template-columns:repeat(6,1fr);opacity:.72}.dataset-feature-strip img{width:100%;height:100%;object-fit:cover}.dataset-feature-card:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent,rgba(0,0,0,.76))}
+.dataset-feature-card > div{position:relative;z-index:1}.dataset-feature-card strong{display:block;font-size:18px}.dataset-feature-card span{font-size:12px}
+.dataset-view-link{margin-top:14px;color:#6b7280;font-size:15px;cursor:pointer;display:inline-flex;gap:9px;align-items:center}
+.dataset-storage-meter{height:10px;border-radius:999px;background:#f1f2f4;overflow:hidden;margin:26px 0}.dataset-storage-meter span{display:block;height:100%;width:1%;background:#22c55e}
+.dataset-category{height:15px;border-radius:999px;display:flex;overflow:hidden;background:#f3f4f6;margin:10px 0 12px}.dataset-category span:nth-child(1){background:#22c55e}.dataset-category span:nth-child(2){background:#a855f7}.dataset-category span:nth-child(3){background:#f59e0b}
+.dataset-legend{display:flex;flex-wrap:wrap;gap:12px 18px;color:#6b7280;font-size:14px;margin-bottom:22px}.dataset-legend b{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.dataset-resource-row{display:flex;align-items:center;justify-content:space-between;color:#374151;font-size:15px;padding:4px 0}
+.dataset-browser{grid-column:1/-1;background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:24px 30px;box-shadow:0 2px 10px rgba(15,23,42,.04)}
+.dataset-browser-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.dataset-browser-head h3{font-size:22px;color:#111827;margin:0}.dataset-browser-head span{color:#6b7280}
+.dataset-platform .img-grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:14px}.dataset-platform .img-card{background:#fff;border-color:#e5e7eb;border-radius:12px;color:#111827;box-shadow:0 2px 8px rgba(15,23,42,.05)}.dataset-platform .img-card:hover{border-color:#1237ff}.dataset-platform .img-card .img-info{color:#374151;font-size:11px}
+.dataset-platform .pagination .btn{background:#fff;color:#111827;border-color:#d1d5db}.dataset-platform .pagination span{color:#6b7280!important}
+.dataset-full .sidebar,.dataset-full .topbar{display:none}.dataset-full .main{height:100vh}.dataset-full .content{padding:0}.dataset-full .dataset-platform{margin:0;min-height:100vh}.dataset-full .dataset-rail{min-height:100vh}.dataset-full .dataset-main{max-height:100vh}
+@media(max-width:1400px){.dataset-layout{grid-template-columns:1fr}.dataset-video{min-height:220px}.dataset-panels{grid-template-columns:1fr 1fr}.dataset-card-panel.storage{grid-column:1/-1}}@media(max-width:980px){.dataset-platform{grid-template-columns:1fr}.dataset-rail{display:none}.dataset-panels{grid-template-columns:1fr}.dataset-main{padding:16px}.dataset-platform{margin:-24px -24px -24px}.dataset-stat-pill{min-width:138px}}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+@media(max-width:768px){.sidebar{width:56px}.sidebar .nav-text,.sidebar-brand small,.sidebar-footer{display:none}.sidebar-brand h1{font-size:16px}}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sidebar-brand"><h1>Ai-JIN</h1><small>แดชบอร์ดแพลตฟอร์ม</small></div>
+  <div class="nav-items">
+    <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span><span class="nav-text">แดชบอร์ด</span></div>
+    <div class="nav-item" data-page="demo"><span class="icon">🔍</span><span class="nav-text">ทดลองใช้</span></div>
+    <div class="nav-item" data-page="dataset"><span class="icon">🖼️</span><span class="nav-text">ชุดข้อมูล</span></div>
+    <div class="nav-item" data-page="annotator"><span class="icon">✏️</span><span class="nav-text">ตัวติดป้ายกำกับ</span></div>
+    <div class="nav-item" data-page="labeling"><span class="icon">📥</span><span class="nav-text">นำเข้าข้อมูล</span></div>
+    <div class="nav-item" data-page="training"><span class="icon">🧠</span><span class="nav-text">เทรนโมเดล</span></div>
+    <div class="nav-item" data-page="models"><span class="icon">📦</span><span class="nav-text">จัดการโมเดล</span></div>
+    <div class="nav-item" data-page="api"><span class="icon">⚡</span><span class="nav-text">API Docs</span></div>
+  </div>
+  <div class="sidebar-footer">
+    <div><span class="dot" id="ls-dot"></span>Label Studio</div>
+    <div style="margin-top:6px"><span class="dot" id="yolo-dot"></span>YOLO GPU</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <h2 id="page-title">แดชบอร์ด</h2>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="refreshAll()">🔄 รีเฟรช</button>
+      <button class="btn btn-sm" onclick="window.open('{{ ls_url }}','_blank')">↗ Label Studio</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+<!-- ═══════ DASHBOARD ═══════ -->
+<div class="page active" id="page-dashboard">
+  <div class="cards" id="stat-cards"></div>
+  <div class="panel"><h3>📋 Label Studio Projects</h3>
+    <div class="table-wrap"><table><thead><tr><th>ID</th><th>โปรเจกต์</th><th>งาน</th><th>ติดป้ายแล้ว</th><th>ความคืบหน้า</th><th></th></tr></thead><tbody id="ls-proj-body"></tbody></table></div>
+  </div>
+  <div class="panel"><h3>🏋️ รอบการเทรน</h3>
+    <div class="table-wrap"><table><thead><tr><th>Run</th><th>Epochs</th><th>mAP50</th><th>โมเดล</th><th>ขนาด</th></tr></thead><tbody id="runs-body"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ═══════ LIVE DEMO ═══════ -->
+<div class="page" id="page-demo">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <!-- Left: Input -->
+    <div>
+      <div class="panel">
+        <h3>🖼️ ภาพนำเข้า</h3>
+        <div class="dropzone" id="demo-drop" onclick="document.getElementById('demo-file').click()">
+          <div class="dz-icon">📤</div>
+          <p>ลากไฟล์มาวาง หรือคลิกเพื่อเลือก</p>
+          <p style="font-size:12px;margin-top:8px">JPEG, PNG, WebP, BMP (max 10MB)</p>
+        </div>
+        <input type="file" id="demo-file" accept="image/*" style="display:none" onchange="demoFileSelected(this)">
+        <div id="demo-preview" style="margin-top:12px;display:none">
+          <img id="demo-img-preview" style="max-width:100%;border-radius:8px">
+        </div>
+      </div>
+      <div class="panel">
+        <h3>⚙️ พารามิเตอร์</h3>
+        <div class="form-group" style="margin-bottom:10px">
+          <label>Model</label>
+          <select id="demo-model" style="width:100%;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+            <option value="">⏳ กำลังโหลด...</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>ความมั่นใจ</label><input id="demo-conf" type="number" value="0.25" step="0.05" min="0.01" max="1"></div>
+          <div class="form-group"><label>IoU</label><input id="demo-iou" type="number" value="0.45" step="0.05" min="0.01" max="1"></div>
+          <div class="form-group"><label>ขนาดภาพ</label><input id="demo-imgsz" type="number" value="640"></div>
+        </div>
+        <button class="btn btn-primary" id="demo-run-btn" onclick="runDemo()" disabled>🚀 รันการตรวจจับ</button>
+        <span id="demo-time" style="margin-left:12px;font-size:12px;color:var(--text2)"></span>
+      </div>
+      <div class="panel" style="display:none" id="demo-examples-panel">
+        <h3>📂 ภาพจาก Dataset</h3>
+        <div id="demo-examples" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+    </div>
+    <!-- Right: Results -->
+    <div>
+      <div class="panel">
+        <h3>📊 ผลการตรวจจับ</h3>
+        <div id="demo-result-area" style="min-height:200px">
+          <div style="position:relative;display:inline-block;width:100%">
+            <canvas id="demo-canvas" style="max-width:100%;border-radius:8px;display:none"></canvas>
+          </div>
+          <div id="demo-no-result" style="text-align:center;padding:60px;color:var(--text2)">
+            <p style="font-size:36px">🔍</p>
+            <p>อัปโหลดภาพแล้วกด Run Inference</p>
+          </div>
+        </div>
+      </div>
+      <div class="panel" style="display:none" id="demo-detections-panel">
+        <h3>🏷️ การตรวจจับ <span id="demo-count" class="badge badge-accent">0</span></h3>
+        <div class="table-wrap"><table><thead><tr><th>คลาส</th><th>ความมั่นใจ</th><th>กรอบ (x1,y1,x2,y2)</th></tr></thead><tbody id="demo-det-body"></tbody></table></div>
+        <div style="margin-top:8px">
+          <button class="btn btn-sm" onclick="copyDemoJSON()">📋 คัดลอก JSON</button>
+          <button class="btn btn-sm btn-green" onclick="saveDemoLabels()">💾 บันทึกเป็น YOLO Label</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ DATASET ═══════ -->
+<div class="page" id="page-dataset">
+  <div class="dataset-platform">
+    <aside class="dataset-rail">
+      <div class="dataset-brand"><span class="dataset-mark"></span><span>Ai-JIN</span></div>
+      <div class="dataset-search"><span>⌕</span><input id="dataset-search" placeholder="ค้นหา..." oninput="loadFolders()"><span class="dataset-kbd">Ctrl K</span></div>
+      <div class="dataset-rail-item active">⌂ <span>หน้าหลัก</span></div>
+      <div class="dataset-rail-item">⌕ <span>สำรวจ</span></div>
+      <div class="dataset-rail-section">โปรเจกต์ของฉัน</div>
+      <div class="dataset-rail-item">▣ <span>ติดป้ายกำกับ</span><span style="margin-left:auto">⌄</span></div>
+      <div id="folder-list" class="dataset-folder-stack"></div>
+      <div class="dataset-rail-item">□ <span>เทรน</span><span style="margin-left:auto">⌄</span></div>
+      <div class="dataset-rail-item">⌁ <span>ใช้งาน</span><span style="margin-left:auto">⌄</span></div>
+      <div class="dataset-rail-section" style="margin-top:auto"></div>
+      <div class="dataset-rail-item">♲ <span>ถังขยะ</span></div>
+      <div class="dataset-rail-item">⚙ <span>ตั้งค่า</span></div>
+      <div class="dataset-rail-item">? <span>ช่วยเหลือ</span></div>
+      <div class="dataset-user">
+        <div class="dataset-avatar">AI</div>
+        <div style="min-width:0"><strong style="display:block;font-size:14px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Aichi AI-JIN</strong><span style="font-size:12px;color:#6b7280">ชุดข้อมูลภายใน</span></div>
+        <span style="margin-left:auto;color:#6b7280">⋮</span>
+      </div>
+    </aside>
+    <main class="dataset-main">
+      <div class="dataset-topline">
+        <div class="dataset-breadcrumb"><span>▣</span><span style="height:22px;width:1px;background:#e5e7eb"></span><strong>Home</strong></div>
+        <div class="dataset-wallet"><strong id="dataset-yolo-status">YOLO —</strong><span>▦</span><span>🔔</span><span>☼</span></div>
+      </div>
+      <div class="dataset-layout">
+        <section class="dataset-hero">
+          <div class="dataset-hero-head">
+            <div class="dataset-hero-avatar">AI</div>
+            <div>
+              <h2>ยินดีต้อนรับกลับ, Aichi-AI <span class="dataset-plan">Local</span></h2>
+              <p><span style="color:#064cff;font-weight:700">@aijin-platform</span> · D:\Ai-JIN_V10.0_patch_output</p>
+            </div>
+          </div>
+          <div class="dataset-stat-row">
+            <div class="dataset-stat-pill"><span>▣</span><div><strong id="dataset-stat-datasets">0</strong><span>ชุดข้อมูล</span></div></div>
+            <div class="dataset-stat-pill"><span>▧</span><div><strong id="dataset-stat-images">0</strong><span>ภาพ</span></div></div>
+            <div class="dataset-stat-pill"><span>⌬</span><div><strong id="dataset-stat-labels">0</strong><span>ป้ายกำกับ</span></div></div>
+            <div class="dataset-stat-pill"><span>□</span><div><strong id="dataset-stat-projects">1</strong><span>โปรเจกต์</span></div></div>
+            <div class="dataset-stat-pill"><span>◇</span><div><strong id="dataset-stat-models">0</strong><span>โมเดล</span></div></div>
+            <div class="dataset-stat-pill"><span>⇩</span><div><strong id="dataset-stat-exports">0</strong><span>ส่งออก</span></div></div>
+            <div class="dataset-stat-pill"><span>⌁</span><div><strong id="dataset-stat-deployments">0</strong><span>การใช้งาน</span></div></div>
+          </div>
+        </section>
+        <section class="dataset-video">
+          <div class="dataset-video-title">เริ่มต้นใช้งาน Ai-JIN Platform</div>
+          <div class="dataset-video-brand">ขั้นตอนการทำงาน YOLO dataset</div>
+          <div class="dataset-play"></div>
+          <div class="dataset-quick">เริ่มต้นด่วน</div>
+        </section>
+      </div>
+      <div class="dataset-panels">
+        <section class="dataset-card-panel">
+          <div class="dataset-panel-head">
+            <div class="dataset-panel-title"><span class="dataset-panel-icon">▣</span>ชุดข้อมูล</div>
+            <button class="dataset-black-btn" onclick="showPageByName('labeling')">+ ชุดข้อมูลใหม่</button>
+          </div>
+          <p class="dataset-muted">อัปโหลดภาพ วิดีโอ และชุดข้อมูล</p>
+          <div class="dataset-drop" onclick="showPageByName('labeling')"><div style="font-size:30px">⇧</div><strong>ลากภาพ วิดีโอ หรือชุดข้อมูลมาวาง</strong><small>ภาพ &lt;50 MB · ชุดข้อมูล &lt;10 GB — ZIP, TAR, NDJSON</small></div>
+          <div id="dataset-active-dataset-card"></div>
+          <div class="dataset-view-link" onclick="document.getElementById('dataset-browser').scrollIntoView({behavior:'smooth'})">ดูทั้งหมด →</div>
+        </section>
+        <section class="dataset-card-panel">
+          <div class="dataset-panel-head">
+            <div class="dataset-panel-title"><span class="dataset-panel-icon" style="background:#f3e8ff;color:#7c3aed">□</span>โปรเจกต์</div>
+            <button class="dataset-black-btn" onclick="showPageByName('training')">+ โปรเจกต์ใหม่</button>
+          </div>
+          <p class="dataset-muted">สร้างโปรเจกต์เพื่อจัดการโมเดล</p>
+          <div class="dataset-drop" onclick="showPageByName('training')"><div style="font-size:30px">⇧</div><strong>ลากไฟล์โมเดล .pt มาวาง</strong><small>โมเดล PyTorch สูงสุด 1 GB</small></div>
+          <div id="dataset-project-list" class="dataset-mini-list"></div>
+          <div class="dataset-view-link" onclick="showPageByName('models')">ดูทั้งหมด →</div>
+        </section>
+        <section class="dataset-card-panel storage">
+          <div class="dataset-panel-title" style="margin-bottom:15px"><span>▱</span>พื้นที่จัดเก็บ</div>
+          <p class="dataset-muted"><span id="dataset-storage-used">0 MB</span> / 100 GB (<span id="dataset-storage-pct">0%</span>)</p>
+          <div class="dataset-storage-meter"><span id="dataset-storage-fill"></span></div>
+          <p class="dataset-muted" style="font-weight:700;margin-bottom:8px">ตามหมวดหมู่</p>
+          <div class="dataset-category"><span id="dataset-cat-images" style="width:1%"></span><span id="dataset-cat-models" style="width:1%"></span><span id="dataset-cat-exports" style="width:1%"></span></div>
+          <div class="dataset-legend"><span><b style="background:#22c55e"></b>ชุดข้อมูล <span id="dataset-legend-images"></span></span><span><b style="background:#a855f7"></b>โมเดล <span id="dataset-legend-models"></span></span><span><b style="background:#f59e0b"></b>ส่งออก</span></div>
+          <p class="dataset-muted" style="font-weight:700;margin-bottom:8px">ทรัพยากร</p>
+          <div id="dataset-resource-list"></div>
+        </section>
+        <section class="dataset-browser" id="dataset-browser">
+          <div class="dataset-browser-head"><h3>ภาพ <span id="img-count" style="font-weight:500;font-size:14px"></span></h3><button class="dataset-black-btn" onclick="loadFolders()">รีเฟรช</button></div>
+          <div class="img-grid" id="img-grid"></div>
+          <div class="pagination" id="img-pagination"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════ ANNOTATOR ═══════ -->
+<div class="page" id="page-annotator">
+  <div style="display:flex;height:calc(100vh - 140px);gap:0">
+    <!-- Left: Canvas Area -->
+    <div style="flex:1;display:flex;flex-direction:column;background:var(--bg);border-radius:var(--radius) 0 0 var(--radius);border:1px solid var(--border)">
+      <!-- Toolbar -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--bg2);border-radius:var(--radius) 0 0 0">
+        <div style="display:flex;background:var(--bg3);border-radius:8px;overflow:hidden;border:1px solid var(--border)">
+          <button class="btn btn-sm" id="ann-mode-draw" onclick="setAnnMode('draw')" style="border-radius:8px 0 0 8px;border:none;background:var(--accent);color:#000">✏️ Draw</button>
+          <button class="btn btn-sm" id="ann-mode-smart" onclick="setAnnMode('smart')" style="border-radius:0 8px 8px 0;border:none">🤖 Smart</button>
+        </div>
+        <span style="color:var(--border)">|</span>
+        <button class="btn btn-sm" onclick="annUndo()" title="Undo (Ctrl+Z)">↩️</button>
+        <button class="btn btn-sm" onclick="annRedo()" title="Redo (Ctrl+Y)">↪️</button>
+        <button class="btn btn-sm" onclick="annDeleteSelected()" title="Delete selected">🗑️</button>
+        <button class="btn btn-sm" onclick="annClearAll()" title="Clear all">🧹</button>
+        <span style="color:var(--border)">|</span>
+        <button class="btn btn-sm btn-green" onclick="annSave()">💾 Save</button>
+        <button class="btn btn-sm btn-primary" onclick="annAutoDetect()">🔍 Auto Detect</button>
+        <span style="flex:1"></span>
+        <span id="ann-zoom-label" style="font-size:11px;color:var(--text2)">100%</span>
+      </div>
+      <!-- Canvas -->
+      <div style="flex:1;overflow:hidden;position:relative;cursor:crosshair" id="ann-canvas-wrap">
+        <canvas id="ann-canvas" style="position:absolute;top:0;left:0"></canvas>
+        <canvas id="ann-overlay" style="position:absolute;top:0;left:0"></canvas>
+      </div>
+      <!-- Image nav -->
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--border);background:var(--bg2);border-radius:0 0 0 var(--radius);font-size:12px">
+        <button class="btn btn-sm" onclick="annPrev()">⬅️</button>
+        <span id="ann-img-index" style="color:var(--text2)">0 / 0</span>
+        <button class="btn btn-sm" onclick="annNext()">➡️</button>
+        <span style="color:var(--border)">|</span>
+        <span id="ann-img-name" style="color:var(--text);font-weight:500;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <span id="ann-img-dim" style="color:var(--text2)"></span>
+        <span id="ann-img-split" class="badge badge-accent" style="display:none"></span>
+        <span id="ann-count-badge" class="badge badge-green">0 ป้ายกำกับ</span>
+        <span style="flex:1"></span>
+        <select id="ann-folder-sel" onchange="annLoadFolder(this.value)" style="padding:4px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;max-width:220px"></select>
+      </div>
+    </div>
+    <!-- Right: Class Panel -->
+    <div style="width:230px;background:var(--bg2);border:1px solid var(--border);border-left:none;border-radius:0 var(--radius) var(--radius) 0;display:flex;flex-direction:column">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+        <input id="ann-class-search" placeholder="ค้นหาคลาส..." style="width:100%;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+      </div>
+      <div id="ann-class-list" style="flex:1;overflow-y:auto;padding:6px 0"></div>
+      <div style="padding:10px 14px;border-top:1px solid var(--border)">
+        <div style="display:flex;gap:6px"><input id="ann-new-class" placeholder="+ เพิ่มคลาส" style="flex:1;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none" onkeydown="if(event.key==='Enter')annAddClass()"><button class="btn btn-sm btn-primary" onclick="annAddClass()" style="padding:4px 8px">+</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ DATA IMPORT ═══════ -->
+<div class="page" id="page-labeling">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <!-- Left Column -->
+    <div>
+      <!-- Upload -->
+      <div class="panel">
+        <h3>📤 อัปโหลดภาพ</h3>
+        <div class="form-row" style="margin-bottom:12px">
+          <div class="form-group"><label>Class</label>
+            <select id="imp-class" style="width:100%;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+              <option value="">— เลือก class —</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Split</label>
+            <select id="imp-split" style="width:100%;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+              <option value="train">Train</option><option value="val">Val</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="imp-new-class" placeholder="หรือพิมพ์ชื่อ class ใหม่..." style="flex:1;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none">
+          <button class="btn btn-sm" onclick="impAddClass()">+ เพิ่ม</button>
+        </div>
+        <div class="dropzone" id="imp-dropzone" onclick="document.getElementById('imp-file-input').click()">
+          <div class="dz-icon">📁</div>
+          <p>ลากภาพมาวาง หรือคลิกเพื่อเลือก</p>
+          <p style="font-size:12px;margin-top:6px;color:var(--text2)">JPEG, PNG, WebP, BMP — รองรับหลายไฟล์พร้อมกัน (สูงสุด 1500 ภาพ)</p>
+        </div>
+        <input type="file" id="imp-file-input" accept="image/*" multiple style="display:none" onchange="impFilesSelected(this)">
+        <div id="imp-upload-status" style="margin-top:10px;font-size:13px;display:none">
+          <div class="progress-bar" style="margin-bottom:6px"><div class="progress-fill" id="imp-progress" style="width:0%"></div></div>
+          <span id="imp-upload-text" style="color:var(--text2)"></span>
+        </div>
+        <div id="imp-preview-area" style="margin-top:10px;display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span id="imp-file-count" style="font-size:13px;color:var(--text2)"></span>
+            <button class="btn btn-sm btn-primary" onclick="impStartUpload()" id="imp-upload-btn">📤 อัปโหลด</button>
+          </div>
+          <div id="imp-thumb-grid" style="display:flex;gap:6px;flex-wrap:wrap;max-height:180px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <!-- Generate YAML -->
+      <div class="panel">
+        <h3>📄 สร้าง data.yaml</h3>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px">สร้างไฟล์ data.yaml สำหรับเทรน YOLO อัตโนมัติจากโครงสร้างโฟลเดอร์</p>
+        <button class="btn btn-primary" onclick="impGenerateYaml()">⚙️ สร้าง data.yaml</button>
+        <pre id="imp-yaml-output" style="margin-top:10px;display:none;font-size:12px"></pre>
+      </div>
+    </div>
+
+    <!-- Right Column -->
+    <div>
+      <!-- Split Overview -->
+      <div class="panel">
+        <h3>📊 สรุปชุดข้อมูล</h3>
+        <div id="imp-split-overview" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
+        <button class="btn btn-sm" onclick="impLoadSplitInfo()" style="margin-top:10px">🔄 รีเฟรช</button>
+      </div>
+
+      <!-- Class List -->
+      <div class="panel">
+        <h3>🏷️ Classes</h3>
+        <div id="imp-class-list"></div>
+      </div>
+
+      <!-- Image Browser -->
+      <div class="panel">
+        <h3>🖼️ ภาพใน Dataset <span id="imp-browse-count" style="font-weight:400;color:var(--text2);font-size:12px"></span></h3>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <select id="imp-browse-folder" onchange="impBrowse()" style="flex:1;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px"></select>
+          <button class="btn btn-sm btn-red" onclick="impDeleteSelected()" id="imp-del-btn" disabled>🗑️ ลบ</button>
+          <button class="btn btn-sm btn-amber" onclick="impMoveSelected()" id="imp-move-btn" disabled>🔀 ย้าย split</button>
+        </div>
+        <div id="imp-browse-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;max-height:340px;overflow-y:auto"></div>
+        <div id="imp-browse-pag" class="pagination" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ TRAINING ═══════ -->
+<div class="page" id="page-training">
+  <div class="cards">
+    <div class="card"><div class="card-label">YOLO Server</div><div class="card-value" id="yolo-status-text">—</div><div class="card-sub" id="yolo-gpu-text"></div></div>
+    <div class="card"><div class="card-label">การเทรน</div><div class="card-value accent" id="train-state">idle</div></div>
+    <div class="card"><div class="card-label">รอบการเทรน</div><div class="card-value" id="total-runs">0</div></div>
+  </div>
+  <div class="panel"><h3>🚀 เริ่มเทรนโมเดลใหม่</h3>
+    <div class="form-row">
+      <div class="form-group"><label>Data YAML</label><input id="train-data" value="/dataset/auto_improve/data.yaml"></div>
+      <div class="form-group"><label>Base Model</label><select id="train-model"><option value="yolo11n.pt">YOLO11n (เร็ว)</option><option value="yolo11s.pt">YOLO11s</option><option value="yolo11m.pt">YOLO11m</option><option value="yolo11l.pt">YOLO11l (แม่น)</option></select></div>
+      <div class="form-group"><label>Epochs</label><input id="train-epochs" type="number" value="100"></div>
+      <div class="form-group"><label>ขนาดภาพ</label><input id="train-imgsz" type="number" value="640"></div>
+      <div class="form-group"><label>Batch Size</label><input id="train-batch" type="number" value="16"></div>
+      <div class="form-group"><label>Run Name</label><input id="train-name" placeholder="auto"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-primary" onclick="startTraining()">🚀 เริ่มเทรน</button>
+      <button class="btn" onclick="checkTrainStatus()">🔍 เช็คสถานะ</button>
+      <button class="btn btn-amber" onclick="runValidation()">📊 ตรวจสอบโมเดล</button>
+    </div>
+    <div id="train-result" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
+    <div id="train-progress-panel" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)">
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--text2);margin-bottom:8px">
+        <span id="train-progress-run">Run: —</span>
+        <span id="train-progress-epoch">Epoch —</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="train-progress-fill" style="width:0%"></div></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:10px;font-size:12px">
+        <div>Loss: <strong id="train-progress-loss" style="color:var(--amber)">—</strong></div>
+        <div>mAP50: <strong id="train-progress-map50" style="color:var(--green)">—</strong></div>
+        <div>mAP50-95: <strong id="train-progress-map5095" style="color:var(--green)">—</strong></div>
+        <div>Status: <strong id="train-progress-state" style="color:var(--accent)">idle</strong></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel"><h3>📊 รอบการเทรน</h3>
+    <div class="table-wrap"><table><thead><tr><th>Run</th><th>Epochs</th><th>mAP50</th><th>mAP50-95</th><th>ขนาด</th><th>การดำเนินการ</th></tr></thead><tbody id="train-runs-body"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ═══════ MODELS ═══════ -->
+<div class="page" id="page-models">
+  <div class="cards">
+    <div class="card"><div class="card-label">โมเดลที่ใช้งาน</div><div class="card-value green" id="active-model-text">—</div><div class="card-sub" id="active-model-size"></div></div>
+  </div>
+  <div class="panel"><h3>📦 โมเดลทั้งหมด</h3>
+    <div class="table-wrap"><table><thead><tr><th>Run</th><th>Epochs</th><th>mAP50</th><th>mAP50-95</th><th>ขนาด</th><th>การดำเนินการ</th></tr></thead><tbody id="models-body"></tbody></table></div>
+  </div>
+  <div class="panel"><h3>📤 ส่งออกโมเดล</h3>
+    <div class="form-row">
+      <div class="form-group"><label>พาธโมเดล</label><input id="export-model" placeholder="เลือกจากตารางด้านบน"></div>
+      <div class="form-group"><label>รูปแบบ</label><select id="export-format"><option value="onnx">ONNX</option><option value="torchscript">TorchScript</option><option value="engine">TensorRT</option><option value="openvino">OpenVINO</option><option value="coreml">CoreML</option><option value="ncnn">NCNN</option></select></div>
+    </div>
+    <button class="btn btn-amber" onclick="exportModel()">📤 ส่งออก</button>
+    <span id="export-result" style="margin-left:12px;font-size:13px;color:var(--text2)"></span>
+  </div>
+</div>
+
+<!-- ═══════ API DOCS ═══════ -->
+<div class="page" id="page-api">
+  <div class="panel">
+    <h3>⚡ Ai-JIN Inference API</h3>
+    <p style="color:var(--text2);margin-bottom:16px">ใช้งานโมเดลและเรียกใช้ผ่าน REST API — รองรับ GPU acceleration</p>
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="showApiTab(this,'api-python')">Python</button>
+      <button class="tab-btn" onclick="showApiTab(this,'api-curl')">cURL</button>
+      <button class="tab-btn" onclick="showApiTab(this,'api-js')">JavaScript</button>
+    </div>
+
+    <div id="api-python">
+<pre><span style="color:var(--accent)">import</span> requests
+<span style="color:var(--accent)">import</span> base64
+
+<span style="color:var(--text2)"># อ่านไฟล์ภาพและแปลงเป็น base64</span>
+<span style="color:var(--accent)">with</span> open(<span style="color:var(--green)">"image.jpg"</span>, <span style="color:var(--green)">"rb"</span>) <span style="color:var(--accent)">as</span> f:
+    img_b64 = base64.b64encode(f.read()).decode()
+
+<span style="color:var(--text2)"># ส่งไป inference</span>
+url = <span style="color:var(--green)">"http://localhost:8111"</span>
+response = requests.post(url, json={
+    <span style="color:var(--green)">"command"</span>: <span style="color:var(--green)">"predict"</span>,
+    <span style="color:var(--green)">"image"</span>: img_b64,
+    <span style="color:var(--green)">"conf"</span>: <span style="color:var(--amber)">0.25</span>,
+    <span style="color:var(--green)">"iou"</span>: <span style="color:var(--amber)">0.45</span>,
+    <span style="color:var(--green)">"imgsz"</span>: <span style="color:var(--amber)">640</span>
+})
+
+result = response.json()
+<span style="color:var(--accent)">print</span>(f<span style="color:var(--green)">"Detected {result['count']} objects"</span>)
+<span style="color:var(--accent)">for</span> det <span style="color:var(--accent)">in</span> result[<span style="color:var(--green)">"detections"</span>]:
+    <span style="color:var(--accent)">print</span>(f<span style="color:var(--green)">"  {det['class_name']}: {det['confidence']:.2f} @ {det['bbox']}"</span>)</pre>
+    </div>
+
+    <div id="api-curl" style="display:none">
+<pre><span style="color:var(--text2)"># Single image inference</span>
+curl -X POST http://localhost:8111 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "predict",
+    "image_path": "/dataset/auto_improve/images/train/JBA23-000030/img001.jpg",
+    "conf": 0.25
+  }'
+
+<span style="color:var(--text2)"># Start training</span>
+curl -X POST http://localhost:8111 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "train",
+    "config": {
+      "data": "/dataset/auto_improve/data.yaml",
+      "epochs": 100,
+      "imgsz": 640,
+      "batch": 16
+    }
+  }'
+
+<span style="color:var(--text2)"># Export model</span>
+curl -X POST http://localhost:8111 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "export",
+    "model": "/runs/train/weights/best.pt",
+    "format": "onnx"
+  }'</pre>
+    </div>
+
+    <div id="api-js" style="display:none">
+<pre><span style="color:var(--text2)">// Upload image via FormData</span>
+<span style="color:var(--accent)">const</span> formData = <span style="color:var(--accent)">new</span> FormData();
+formData.append(<span style="color:var(--green)">'image'</span>, fileInput.files[<span style="color:var(--amber)">0</span>]);
+formData.append(<span style="color:var(--green)">'conf'</span>, <span style="color:var(--green)">'0.25'</span>);
+
+<span style="color:var(--accent)">const</span> response = <span style="color:var(--accent)">await</span> fetch(<span style="color:var(--green)">'/api/predict'</span>, {
+  method: <span style="color:var(--green)">'POST'</span>,
+  body: formData
+});
+
+<span style="color:var(--accent)">const</span> result = <span style="color:var(--accent)">await</span> response.json();
+console.log(<span style="color:var(--green)">`Found ${result.count} objects`</span>);
+
+result.detections.forEach(det => {
+  console.log(<span style="color:var(--green)">`${det.class_name}: ${det.confidence} @ [${det.bbox}]`</span>);
+});</pre>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>📘 API Endpoints</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>เมธอด</th><th>Endpoint</th><th>คำอธิบาย</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/health</code></td><td>สถานะเซิร์ฟเวอร์, ข้อมูล GPU, สถานะการเทรน</td></tr>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/models</code></td><td>แสดงรายการโมเดลที่เทรนแล้ว</td></tr>
+        <tr><td><span class="badge badge-accent">POST</span></td><td><code>/</code> <code>command=predict</code></td><td>ตรวจจับภาพเดียว (base64 หรือ path)</td></tr>
+        <tr><td><span class="badge badge-accent">POST</span></td><td><code>/</code> <code>command=batch_predict</code></td><td>ตรวจจับหลายภาพในโฟลเดอร์</td></tr>
+        <tr><td><span class="badge badge-accent">POST</span></td><td><code>/</code> <code>command=train</code></td><td>เริ่มงานเทรน</td></tr>
+        <tr><td><span class="badge badge-accent">POST</span></td><td><code>/</code> <code>command=val</code></td><td>รัน validation (mAP metrics)</td></tr>
+        <tr><td><span class="badge badge-accent">POST</span></td><td><code>/</code> <code>command=export</code></td><td>ส่งออกโมเดล (ONNX, TensorRT ฯลฯ)</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="panel">
+    <h3>🔧 รูปแบบการตอบกลับ</h3>
+<pre>{
+  <span style="color:var(--green)">"status"</span>: <span style="color:var(--green)">"ok"</span>,
+  <span style="color:var(--green)">"model"</span>: <span style="color:var(--green)">"/app-models/best.pt"</span>,
+  <span style="color:var(--green)">"image_width"</span>: <span style="color:var(--amber)">640</span>,
+  <span style="color:var(--green)">"image_height"</span>: <span style="color:var(--amber)">480</span>,
+  <span style="color:var(--green)">"count"</span>: <span style="color:var(--amber)">3</span>,
+  <span style="color:var(--green)">"detections"</span>: [
+    {
+      <span style="color:var(--green)">"class_id"</span>: <span style="color:var(--amber)">0</span>,
+      <span style="color:var(--green)">"class_name"</span>: <span style="color:var(--green)">"JBA23-000030"</span>,
+      <span style="color:var(--green)">"confidence"</span>: <span style="color:var(--amber)">0.9512</span>,
+      <span style="color:var(--green)">"bbox"</span>: [<span style="color:var(--amber)">120, 85, 340, 290</span>],
+      <span style="color:var(--green)">"bbox_norm"</span>: [<span style="color:var(--amber)">0.1875, 0.17708, 0.53125, 0.60417</span>]
+    }
+  ]
+}</pre>
+  </div>
+</div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- Modals -->
+<div class="modal-overlay" id="img-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal"><div class="modal-header"><span id="modal-title">ตัวอย่าง</span><button class="btn btn-sm" onclick="closeModal()">✕</button></div>
+    <div class="modal-body"><canvas id="modal-canvas" style="width:100%"></canvas><div id="modal-labels" style="margin-top:10px;font-size:13px"></div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const LS_URL='{{ls_url}}',YOLO_URL='{{yolo_url}}';
+let currentFolder='auto_improve/images',currentPage=1,statsData=null,demoFile=null,demoDetections=[];
+
+// ── Nav ──
+document.querySelectorAll('.nav-item').forEach(el=>{el.addEventListener('click',()=>{
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  const p=el.dataset.page;
+  document.body.classList.toggle('dataset-full',p==='dataset');
+  document.getElementById('page-'+p).classList.add('active');
+  document.getElementById('page-title').textContent={dashboard:'แดชบอร์ด',demo:'ทดลองใช้',dataset:'ชุดข้อมูล',annotator:'ตัวติดป้ายกำกับ',labeling:'นำเข้าข้อมูล',training:'เทรนโมเดล',models:'จัดการโมเดล',api:'API Docs'}[p]||p;
+  if(p==='dataset')loadFolders();
+  if(p==='training'||p==='models')loadModels();
+  if(p==='demo'){loadDemoModels();loadDemoExamples()}
+  if(p==='annotator')annInit();
+  if(p==='labeling')impInit();
+})});
+
+function showPageByName(name){
+  const nav=document.querySelector(`.nav-item[data-page="${name}"]`);
+  if(nav)nav.click();
+}
+
+function toast(m,t=''){const e=document.getElementById('toast');e.textContent=m;e.className='toast show '+t;setTimeout(()=>e.classList.remove('show'),4000)}
+async function api(p,o){try{const r=await fetch(p,o);return await r.json()}catch(e){return{error:e.message}}}
+
+// ── Dashboard ──
+async function loadStats(){
+  const d=await api('/api/stats');if(d.error)return;statsData=d;
+  const ds=d.dataset,nC=Object.keys(ds.classes).length;
+  const yOk=d.training.yolo_status.status!=='offline';
+  document.getElementById('ls-dot').className='dot '+(d.label_studio.projects.length>0?'on':'off');
+  document.getElementById('yolo-dot').className='dot '+(yOk?'on':'off');
+  document.getElementById('stat-cards').innerHTML=`
+    <div class="card"><div class="card-label">ภาพทั้งหมด</div><div class="card-value accent">${ds.total_images.toLocaleString()}</div><div class="card-sub">${ds.total_labels.toLocaleString()} labels</div></div>
+    <div class="card"><div class="card-label">Auto-Improve</div><div class="card-value green">${ds.auto_improve_images}</div><div class="card-sub">${ds.auto_improve_labels} labels</div></div>
+    <div class="card"><div class="card-label">Classes</div><div class="card-value amber">${nC}</div><div class="card-sub">${Object.keys(ds.classes).join(', ')||'—'}</div></div>
+    <div class="card"><div class="card-label">รอบการเทรน</div><div class="card-value">${d.training.runs.length}</div><div class="card-sub">YOLO: ${yOk?'<span style="color:var(--green)">ออนไลน์</span>':'<span style="color:var(--red)">ออฟไลน์</span>'}</div></div>
+    <div class="card"><div class="card-label">GPU</div><div class="card-value" style="font-size:18px">${d.training.yolo_status.gpu?'✅ พร้อม':'❌ ไม่พบ'}</div></div>`;
+  document.getElementById('ls-proj-body').innerHTML=d.label_studio.projects.map(p=>{
+    const pct=p.task_count?Math.round(p.completed/p.task_count*100):0;
+    return`<tr><td>${p.id}</td><td><strong>${p.title}</strong></td><td>${p.task_count.toLocaleString()}</td><td>${p.completed.toLocaleString()}</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${pct}%"></div></div><span style="font-size:12px">${pct}%</span></div></td><td><a href="${LS_URL}/projects/${p.id}/data" target="_blank" class="btn btn-sm">เปิด ↗</a></td></tr>`
+  }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text2)">ไม่พบ project</td></tr>';
+  document.getElementById('runs-body').innerHTML=d.training.runs.map(r=>`<tr><td>${r.name}</td><td>${r.epochs||'—'}</td><td>${r.last_line?parseFloat(r.last_line[r.last_line.length-3]||0).toFixed(4):'—'}</td><td>${r.has_best?'<span class="badge badge-green">best.pt</span>':'<span class="badge badge-red">ไม่มี</span>'}</td><td>${r.best_size_mb?r.best_size_mb+' MB':''}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text2)">ยังไม่มี</td></tr>';
+}
+
+// ── Live Demo ──
+const demoDropEl=document.getElementById('demo-drop');
+['dragenter','dragover'].forEach(e=>demoDropEl.addEventListener(e,ev=>{ev.preventDefault();demoDropEl.classList.add('drag')}));
+['dragleave','drop'].forEach(e=>demoDropEl.addEventListener(e,ev=>{ev.preventDefault();demoDropEl.classList.remove('drag')}));
+demoDropEl.addEventListener('drop',ev=>{if(ev.dataTransfer.files.length)handleDemoFile(ev.dataTransfer.files[0])});
+
+function demoFileSelected(inp){if(inp.files.length)handleDemoFile(inp.files[0])}
+function handleDemoFile(file){
+  demoFile=file;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    document.getElementById('demo-img-preview').src=e.target.result;
+    document.getElementById('demo-preview').style.display='block';
+    document.getElementById('demo-run-btn').disabled=false;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runDemo(){
+  if(!demoFile)return;
+  const btn=document.getElementById('demo-run-btn');
+  btn.disabled=true;btn.textContent='⏳ กำลังประมวลผล...';
+  const t0=performance.now();
+  const form=new FormData();
+  form.append('image',demoFile);
+  form.append('conf',document.getElementById('demo-conf').value);
+  form.append('iou',document.getElementById('demo-iou').value);
+  form.append('imgsz',document.getElementById('demo-imgsz').value);
+  const selModel=document.getElementById('demo-model').value;
+  if(selModel)form.append('model',selModel);
+  let d=await api('/api/predict',{method:'POST',body:form});
+  if(d.error){
+    d=await api('/api/predict/local',{method:'POST',body:form});
+  }
+  const elapsed=((performance.now()-t0)/1000).toFixed(2);
+  btn.disabled=false;btn.textContent='🚀 รันการตรวจจับ';
+  document.getElementById('demo-time').textContent=`⏱ ${elapsed}s`;
+  if(d.error){toast('❌ '+d.error,'error');return}
+  demoDetections=d.detections||[];
+  window._demoResultW=d.image_width||0;
+  window._demoResultH=d.image_height||0;
+  window.demoDetections=demoDetections;
+  drawDemoResults(d);
+}
+
+function drawDemoResults(d){
+  const canvas=document.getElementById('demo-canvas');
+  const ctx=canvas.getContext('2d');
+  const img=new Image();
+  img.onload=()=>{
+    canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+    ctx.drawImage(img,0,0);
+    const colors=['#25c8f6','#22c55e','#f59e0b','#ef4444','#6c63ff','#ec4899','#14b8a6','#f97316'];
+    (d.detections||[]).forEach(det=>{
+      const[x1,y1,x2,y2]=det.bbox;
+      const c=colors[det.class_id%colors.length];
+      ctx.strokeStyle=c;ctx.lineWidth=3;ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+      ctx.fillStyle=c;ctx.font='bold 14px sans-serif';
+      const label=`${det.class_name} ${(det.confidence*100).toFixed(1)}%`;
+      const tw=ctx.measureText(label).width;
+      ctx.fillRect(x1,y1-20,tw+8,20);
+      ctx.fillStyle='#fff';ctx.fillText(label,x1+4,y1-5);
+    });
+    canvas.style.display='block';
+    document.getElementById('demo-no-result').style.display='none';
+  };
+  img.src=document.getElementById('demo-img-preview').src;
+  document.getElementById('demo-count').textContent=d.count;
+  document.getElementById('demo-detections-panel').style.display='block';
+  document.getElementById('demo-det-body').innerHTML=(d.detections||[]).map(det=>`<tr><td><span style="color:${['#25c8f6','#22c55e','#f59e0b','#ef4444','#6c63ff'][det.class_id%5]}">●</span> ${det.class_name}</td><td>${(det.confidence*100).toFixed(1)}%</td><td>[${det.bbox.join(', ')}]</td></tr>`).join('');
+}
+
+function copyDemoJSON(){navigator.clipboard.writeText(JSON.stringify(demoDetections,null,2));toast('📋 คัดลอกแล้ว!','success')}
+async function saveDemoLabels(){
+  if(!demoDetections||!demoDetections.length){toast('ไม่มี detection ให้บันทึก','error');return}
+  // Need an image path — use the last loaded dataset path or prompt
+  const lastResult=demoDetections;
+  const imgW=lastResult[0]?.image_width||window._demoResultW;
+  const imgH=lastResult[0]?.image_height||window._demoResultH;
+  if(!imgW||!imgH){toast('ไม่ทราบขนาดภาพ — กรุณา run inference ก่อน','error');return}
+  // Convert bbox [x1,y1,x2,y2] to YOLO format: class_id cx cy w h (normalized)
+  const lines=lastResult.map(det=>{
+    const[x1,y1,x2,y2]=det.bbox;
+    const cx=((x1+x2)/2)/imgW;
+    const cy=((y1+y2)/2)/imgH;
+    const w=(x2-x1)/imgW;
+    const h=(y2-y1)/imgH;
+    return{class_id:det.class_id,cx,cy,w,h};
+  });
+  // Ask for image path — try to use filename from demoFile
+  const imagePath=prompt('ระบุ path ภาพใน dataset (เช่น auto_improve/images/train/class/img.jpg):',
+    demoFile?'auto_improve/images/'+demoFile.name:'');
+  if(!imagePath){toast('ยกเลิก','');return}
+  const d=await api('/api/label/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_path:imagePath,labels:lines})});
+  if(d.ok){toast(`💾 บันทึก ${d.count} labels สำเร็จ`,'success')}else{toast('❌ '+(d.error||JSON.stringify(d)),'error')}
+}
+
+async function loadDemoModels(){
+  const d=await api('/api/models');if(!d||d.error)return;
+  const sel=document.getElementById('demo-model');
+  let opts='';
+  if(d.active&&d.active.active_model){
+    opts+=`<option value="${d.active.active_model}" selected>⭐ Active: best.pt (${d.active.active_size_mb} MB)</option>`;
+  }
+  (d.models||[]).forEach(m=>{
+    const label=`${m.run} — mAP50: ${m.mAP50!==undefined?m.mAP50.toFixed(4):'?'} (${m.best_size_mb} MB)`;
+    const isActive=d.active&&d.active.active_model&&m.best_pt&&d.active.active_model.replace(/\\\\/g,'/')===m.best_pt.replace(/\\\\/g,'/');
+    if(!isActive)opts+=`<option value="${m.best_pt}">${label}</option>`;
+  });
+  sel.innerHTML=opts||'<option value="">ไม่พบโมเดล</option>';
+}
+
+async function loadDemoExamples(){
+  const d=await api('/api/images?dir=auto_improve/images/train/JBA23-000030&per_page=6');
+  if(!d.images||!d.images.length)return;
+  document.getElementById('demo-examples-panel').style.display='block';
+  document.getElementById('demo-examples').innerHTML=d.images.map(img=>`<img src="/api/image/${img.path}" style="width:80px;height:80px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid var(--border)" onclick="loadDemoFromDataset('${img.path}')">`).join('');
+}
+
+async function loadDemoFromDataset(path){
+  const r=await fetch('/api/image/'+path);
+  const blob=await r.blob();
+  demoFile=new File([blob],path.split('/').pop(),{type:blob.type});
+  document.getElementById('demo-img-preview').src=URL.createObjectURL(blob);
+  document.getElementById('demo-preview').style.display='block';
+  document.getElementById('demo-run-btn').disabled=false;
+}
+
+// ── Dataset ──
+function dsClassName(path){return(path||'dataset').split('/').filter(Boolean).pop()||'dataset'}
+function dsInitial(path){return dsClassName(path).replace(/[^a-zA-Z0-9]/g,'').slice(0,1).toUpperCase()||'D'}
+function dsMb(n){return`${(n||0).toFixed(1)} MB`}
+function dsPaintStats(stats,folders){
+  const ds=stats?.dataset||{classes:{},total_images:0,total_labels:0};
+  const runs=stats?.training?.runs||[];
+  const bestRuns=runs.filter(r=>r.has_best);
+  const imageMb=Math.max(1,ds.total_images*0.18);
+  const modelMb=bestRuns.reduce((s,r)=>s+(Number(r.best_size_mb)||0),0);
+  const exportMb=Math.max(0,Math.round(runs.length*2.5));
+  const used=imageMb+modelMb+exportMb,pct=Math.min(100,Math.max(1,used/102400*100));
+  const folderCount=folders.length||Object.keys(ds.classes||{}).length;
+  document.getElementById('dataset-yolo-status').textContent=`YOLO ${stats?.training?.yolo_status?.status||'—'}${stats?.training?.yolo_status?.gpu?' · GPU':''}`;
+  document.getElementById('dataset-stat-datasets').textContent=folderCount.toLocaleString();
+  document.getElementById('dataset-stat-images').textContent=(ds.total_images||0).toLocaleString();
+  document.getElementById('dataset-stat-labels').textContent=(ds.total_labels||0).toLocaleString();
+  document.getElementById('dataset-stat-projects').textContent=Math.max(1,Object.keys(ds.classes||{}).length).toLocaleString();
+  document.getElementById('dataset-stat-models').textContent=bestRuns.length.toLocaleString();
+  document.getElementById('dataset-stat-exports').textContent=runs.length.toLocaleString();
+  document.getElementById('dataset-stat-deployments').textContent='0';
+  document.getElementById('dataset-storage-used').textContent=dsMb(used);
+  document.getElementById('dataset-storage-pct').textContent=`${pct.toFixed(1)}%`;
+  document.getElementById('dataset-storage-fill').style.width=pct+'%';
+  const total=Math.max(1,used);
+  document.getElementById('dataset-cat-images').style.width=Math.max(5,imageMb/total*100)+'%';
+  document.getElementById('dataset-cat-models').style.width=Math.max(5,modelMb/total*100)+'%';
+  document.getElementById('dataset-cat-exports').style.width=Math.max(5,exportMb/total*100)+'%';
+  document.getElementById('dataset-legend-images').textContent=`(${dsMb(imageMb)})`;
+  document.getElementById('dataset-legend-models').textContent=`(${dsMb(modelMb)})`;
+  document.getElementById('dataset-resource-list').innerHTML=[
+    ['Projects',Math.max(1,Object.keys(ds.classes||{}).length)],
+    ['Datasets',folderCount],
+    ['Models',bestRuns.length],
+    ['Images',ds.total_images||0],
+    ['Deployments','0 / 3'],
+  ].map(([k,v])=>`<div class="dataset-resource-row"><span>${k}</span><strong>${v}</strong></div>`).join('');
+  document.getElementById('dataset-project-list').innerHTML=(runs.slice(0,2).map((r,i)=>`
+    <div class="dataset-mini-card" onclick="showPageByName('models')"><div class="dataset-mini-icon" style="background:${i?'#f43f5e':'#ef4444'}">${(r.name||'M').slice(0,1).toUpperCase()}</div><div><strong>${r.name}</strong><br><span>${r.has_best?'1 model':'0 models'} ${r.best_size_mb?` · ${r.best_size_mb} MB`:''}</span></div></div>
+  `).join(''))||'<div class="dataset-mini-card" onclick="showPageByName(\'training\')"><div class="dataset-mini-icon">T</div><div><strong>เริ่มเทรนโมเดล</strong><br><span>ยังไม่มี project</span></div></div>';
+}
+async function loadFolders(){
+  const d=await api('/api/folders');if(d.error)return;
+  const folders=d.folders||[];
+  if((!currentFolder||currentFolder==='auto_improve/images'||!folders.some(f=>f.path===currentFolder))&&folders.length)currentFolder=folders[0].path;
+  const q=(document.getElementById('dataset-search')?.value||'').toLowerCase();
+  const visible=folders.filter(f=>!q||f.path.toLowerCase().includes(q));
+  document.getElementById('folder-list').innerHTML=visible.map((f,i)=>`<div class="dataset-folder-item ${f.path===currentFolder?'active':''}" onclick="selectFolder('${f.path}')"><span class="dataset-folder-dot" style="background:${['#64748b','#ef4444','#f43f5e','#7c3aed','#0ea5e9'][i%5]}">${dsInitial(f.path)}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${dsClassName(f.path)}</span><small style="margin-left:auto;color:#6b7280">${f.count}</small></div>`).join('');
+  const stats=statsData||await api('/api/stats');
+  if(!stats.error){statsData=stats;dsPaintStats(stats,folders)}
+  loadImages();
+}
+function selectFolder(p){currentFolder=p;currentPage=1;loadFolders()}
+async function loadImages(){
+  const d=await api(`/api/images?dir=${encodeURIComponent(currentFolder)}&page=${currentPage}&per_page=60`);if(d.error)return;
+  document.getElementById('img-count').textContent=`— ${d.total.toLocaleString()} ภาพ (${d.page}/${d.pages})`;
+  document.getElementById('img-grid').innerHTML=d.images.map(i=>`<div class="img-card" onclick="previewImage('${i.path}','${i.name}')"><img src="/api/image/${i.path}" loading="lazy"><div class="img-info">${i.name}</div></div>`).join('');
+  const thumbs=d.images.slice(0,6).map(i=>`<img src="/api/image/${i.path}" loading="lazy">`).join('');
+  document.getElementById('dataset-active-dataset-card').innerHTML=`
+    <div class="dataset-feature-card" onclick="document.getElementById('dataset-browser').scrollIntoView({behavior:'smooth'})">
+      <div class="dataset-feature-strip">${thumbs||'<span style="background:#111827"></span>'}</div>
+      <div><strong>${dsClassName(currentFolder)}</strong><span>${d.total.toLocaleString()} imgs · ${statsData?.dataset?.classes?Object.keys(statsData.dataset.classes).length:0} cls · ${statsData?.dataset?.total_labels||0} labels</span></div>
+    </div>`;
+  let pg='';if(d.page>1)pg+=`<button class="btn btn-sm" onclick="goPage(${d.page-1})">← ก่อนหน้า</button>`;
+  pg+=`<span style="color:var(--text2);font-size:13px">${d.page}/${d.pages}</span>`;
+  if(d.page<d.pages)pg+=`<button class="btn btn-sm" onclick="goPage(${d.page+1})">ถัดไป →</button>`;
+  document.getElementById('img-pagination').innerHTML=pg;
+}
+function goPage(p){currentPage=p;loadImages()}
+
+async function previewImage(path,name){
+  document.getElementById('modal-title').textContent=name;
+  document.getElementById('img-modal').classList.add('open');
+  const canvas=document.getElementById('modal-canvas'),ctx=canvas.getContext('2d'),img=new Image();
+  img.onload=async()=>{
+    canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;ctx.drawImage(img,0,0);
+    const ld=await api(`/api/label/${path}`);
+    const el=document.getElementById('modal-labels');
+    if(ld.exists&&ld.labels.length>0){
+      const colors=['#25c8f6','#22c55e','#f59e0b','#ef4444','#6c63ff'];
+      ld.labels.forEach(l=>{const x=(l.cx-l.w/2)*img.naturalWidth,y=(l.cy-l.h/2)*img.naturalHeight,w=l.w*img.naturalWidth,h=l.h*img.naturalHeight,c=colors[l.class_id%colors.length];ctx.strokeStyle=c;ctx.lineWidth=3;ctx.strokeRect(x,y,w,h);ctx.fillStyle=c;ctx.font='bold 14px sans-serif';ctx.fillText(`class ${l.class_id}`,x+4,y-5)});
+      el.innerHTML=`<span class="badge badge-green">${ld.labels.length} วัตถุ</span>`;
+    }else el.innerHTML='<span class="badge badge-red">ไม่มี label</span>';
+  };
+  img.src=`/api/image/${path}`;
+}
+function closeModal(){document.getElementById('img-modal').classList.remove('open')}
+
+// ── Data Import ──
+let impFiles=[],impSelectedPaths=new Set(),impBrowsePage=1;
+const impDropEl=document.getElementById('imp-dropzone');
+if(impDropEl){
+  ['dragenter','dragover'].forEach(e=>impDropEl.addEventListener(e,ev=>{ev.preventDefault();impDropEl.classList.add('drag')}));
+  ['dragleave','drop'].forEach(e=>impDropEl.addEventListener(e,ev=>{ev.preventDefault();impDropEl.classList.remove('drag')}));
+  impDropEl.addEventListener('drop',ev=>{if(ev.dataTransfer.files.length)impHandleFiles(ev.dataTransfer.files)});
+}
+
+function impFilesSelected(inp){if(inp.files.length)impHandleFiles(inp.files)}
+function impHandleFiles(fileList){
+  impFiles=Array.from(fileList).filter(f=>f.type.startsWith('image/')).slice(0,1500);
+  document.getElementById('imp-file-count').textContent=`${impFiles.length} ภาพพร้อมอัปโหลด`;
+  document.getElementById('imp-preview-area').style.display='block';
+  const grid=document.getElementById('imp-thumb-grid');
+  grid.innerHTML=impFiles.slice(0,30).map((f,i)=>{
+    const url=URL.createObjectURL(f);
+    return`<img src="${url}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" title="${f.name}">`;
+  }).join('')+(impFiles.length>30?`<span style="display:flex;align-items:center;justify-content:center;width:60px;height:60px;background:var(--bg3);border-radius:6px;font-size:12px;color:var(--text2)">+${impFiles.length-30}</span>`:'');
+}
+
+async function impStartUpload(){
+  const cls=document.getElementById('imp-new-class').value.trim()||document.getElementById('imp-class').value;
+  if(!cls){toast('กรุณาเลือกหรือพิมพ์ชื่อ class','error');return}
+  const split=document.getElementById('imp-split').value;
+  const btn=document.getElementById('imp-upload-btn');
+  btn.disabled=true;btn.textContent='⏳ กำลังอัปโหลด...';
+  document.getElementById('imp-upload-status').style.display='block';
+  const batchSize=50;let uploaded=0,skipped=0;
+  for(let i=0;i<impFiles.length;i+=batchSize){
+    const batch=impFiles.slice(i,i+batchSize);
+    const form=new FormData();
+    form.append('class_name',cls);
+    form.append('split',split);
+    batch.forEach(f=>form.append('images',f));
+    const d=await api('/api/import/upload',{method:'POST',body:form});
+    if(d.ok){uploaded+=d.saved;skipped+=d.skipped}
+    const pct=Math.min(100,Math.round((i+batch.length)/impFiles.length*100));
+    document.getElementById('imp-progress').style.width=pct+'%';
+    document.getElementById('imp-upload-text').textContent=`${uploaded} uploaded, ${skipped} skipped (${pct}%)`;
+  }
+  btn.disabled=false;btn.textContent='📤 อัปโหลด';
+  toast(`✅ อัปโหลด ${uploaded} ภาพสำเร็จ`,'success');
+  impFiles=[];document.getElementById('imp-preview-area').style.display='none';
+  impLoadSplitInfo();impLoadBrowseFolders();
+}
+
+async function impInit(){
+  await impLoadClasses();
+  await impLoadSplitInfo();
+  await impLoadBrowseFolders();
+}
+
+async function impLoadClasses(){
+  const d=await api('/api/import/classes');
+  if(!d.classes)return;
+  const sel=document.getElementById('imp-class');
+  sel.innerHTML='<option value="">— เลือก class —</option>'+d.classes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  document.getElementById('imp-class-list').innerHTML=d.classes.map((c,i)=>{
+    const col=ANN_COLORS[i%ANN_COLORS.length];
+    const id=d.class_mapping[c]!==undefined?d.class_mapping[c]:i;
+    return`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)"><span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0"></span><span style="flex:1;font-size:13px">${c}</span><span class="badge badge-accent">id: ${id}</span></div>`;
+  }).join('')||'<div style="padding:12px;color:var(--text2);font-size:13px;text-align:center">ยังไม่มี class</div>';
+}
+
+function impAddClass(){
+  const inp=document.getElementById('imp-new-class');
+  const name=inp.value.trim();
+  if(!name)return;
+  const sel=document.getElementById('imp-class');
+  const exists=Array.from(sel.options).some(o=>o.value===name);
+  if(!exists){
+    const opt=document.createElement('option');opt.value=name;opt.textContent=name;
+    sel.appendChild(opt);
+  }
+  sel.value=name;inp.value='';
+  toast(`➕ Class "${name}" พร้อมใช้`,'success');
+}
+
+async function impLoadSplitInfo(){
+  const d=await api('/api/import/split-info');
+  if(!d.train)return;
+  const el=document.getElementById('imp-split-overview');
+  el.innerHTML=['train','val'].map(s=>{
+    const info=d[s];
+    const cls=Object.entries(info.classes||{}).map(([k,v])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span style="color:var(--text2)">${k}</span><span>${v}</span></div>`).join('');
+    return`<div class="card" style="padding:14px"><div class="card-label">${s.toUpperCase()}</div><div class="card-value ${s==='train'?'accent':'green'}">${info.total}</div><div class="card-sub">${info.labels||0} labels</div><div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px">${cls||'<span style="font-size:12px;color:var(--text2)">ว่าง</span>'}</div></div>`;
+  }).join('');
+}
+
+async function impLoadBrowseFolders(){
+  const d=await api('/api/folders');
+  if(!d.folders)return;
+  const sel=document.getElementById('imp-browse-folder');
+  sel.innerHTML=d.folders.map(f=>`<option value="${f.path}">${f.path} (${f.count})</option>`).join('');
+  if(sel.options.length)impBrowse();
+}
+
+async function impBrowse(){
+  const dir=document.getElementById('imp-browse-folder').value;
+  if(!dir)return;
+  const d=await api(`/api/images?dir=${encodeURIComponent(dir)}&page=${impBrowsePage}&per_page=60`);
+  if(!d.images)return;
+  document.getElementById('imp-browse-count').textContent=`— ${d.total} ภาพ (${d.page}/${d.pages})`;
+  impSelectedPaths.clear();impUpdateBrowseBtns();
+  document.getElementById('imp-browse-grid').innerHTML=d.images.map(i=>`<div class="img-card" style="position:relative;border-radius:6px;overflow:hidden" onclick="impToggleSelect(this,'${i.path}')"><img src="/api/image/${i.path}" loading="lazy" style="width:100%;aspect-ratio:1;object-fit:cover;display:block"><div style="position:absolute;top:4px;left:4px;width:16px;height:16px;border-radius:4px;border:2px solid var(--accent);background:var(--bg2);opacity:.8" data-check></div><div style="font-size:9px;padding:3px 5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div></div>`).join('');
+  let pg='';
+  if(d.page>1)pg+=`<button class="btn btn-sm" onclick="impBrowsePage=${d.page-1};impBrowse()">←</button>`;
+  pg+=`<span style="color:var(--text2);font-size:12px">${d.page}/${d.pages}</span>`;
+  if(d.page<d.pages)pg+=`<button class="btn btn-sm" onclick="impBrowsePage=${d.page+1};impBrowse()">→</button>`;
+  document.getElementById('imp-browse-pag').innerHTML=pg;
+}
+
+function impToggleSelect(el,path){
+  if(impSelectedPaths.has(path)){impSelectedPaths.delete(path);el.style.borderColor='var(--border)';el.querySelector('[data-check]').style.background='var(--bg2)'}
+  else{impSelectedPaths.add(path);el.style.borderColor='var(--accent)';el.querySelector('[data-check]').style.background='var(--accent)'}
+  impUpdateBrowseBtns();
+}
+function impUpdateBrowseBtns(){
+  const n=impSelectedPaths.size;
+  document.getElementById('imp-del-btn').disabled=!n;
+  document.getElementById('imp-move-btn').disabled=!n;
+  document.getElementById('imp-del-btn').textContent=`🗑️ ลบ${n?` (${n})`:''}`;
+  document.getElementById('imp-move-btn').textContent=`🔀 ย้าย${n?` (${n})`:''}`;
+}
+
+async function impDeleteSelected(){
+  if(!impSelectedPaths.size)return;
+  if(!confirm(`ลบ ${impSelectedPaths.size} ภาพ? (ย้อนกลับไม่ได้)`))return;
+  const d=await api('/api/import/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:Array.from(impSelectedPaths)})});
+  if(d.ok){toast(`🗑️ ลบ ${d.deleted} ภาพ`,'success');impBrowse();impLoadSplitInfo()}else toast('❌ '+d.error,'error');
+}
+
+async function impMoveSelected(){
+  if(!impSelectedPaths.size)return;
+  const dir=document.getElementById('imp-browse-folder').value;
+  const target=dir.includes('/train')?'val':'train';
+  if(!confirm(`ย้าย ${impSelectedPaths.size} ภาพไป ${target}?`))return;
+  const d=await api('/api/import/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paths:Array.from(impSelectedPaths),target_split:target})});
+  if(d.ok){toast(`🔀 ย้าย ${d.moved} ภาพไป ${target}`,'success');impBrowse();impLoadSplitInfo()}else toast('❌ '+d.error,'error');
+}
+
+async function impGenerateYaml(){
+  const d=await api('/api/import/generate-yaml',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+  if(d.ok){
+    document.getElementById('imp-yaml-output').style.display='block';
+    document.getElementById('imp-yaml-output').textContent=d.yaml;
+    toast(`✅ สร้าง data.yaml — ${d.nc} classes`,'success');
+    impLoadClasses();
+  }else toast('❌ '+JSON.stringify(d),'error');
+}
+
+// ── Training ──
+let trainEventSource=null,trainExpectedEpochs=0;
+
+function fmtMetric(v){
+  return v===undefined||v===null||v===''?'—':Number(v).toFixed(4);
+}
+
+function closeTrainStream(){
+  if(trainEventSource){trainEventSource.close();trainEventSource=null}
+}
+
+function updateTrainProgress(d){
+  const panel=document.getElementById('train-progress-panel');
+  panel.style.display='block';
+  const epoch=Number(d.epoch||0),total=trainExpectedEpochs||Number(document.getElementById('train-epochs').value)||0;
+  const pct=total&&epoch?Math.max(0,Math.min(100,epoch/total*100)):0;
+  document.getElementById('train-progress-fill').style.width=pct+'%';
+  document.getElementById('train-progress-run').textContent=`Run: ${d.run_name||'—'}`;
+  document.getElementById('train-progress-epoch').textContent=total&&epoch?`Epoch ${epoch} / ${total}`:'Epoch —';
+  document.getElementById('train-progress-loss').textContent=fmtMetric(d.loss);
+  document.getElementById('train-progress-map50').textContent=fmtMetric(d.mAP50);
+  document.getElementById('train-progress-map5095').textContent=fmtMetric(d.mAP50_95);
+  document.getElementById('train-progress-state').textContent=d.state||d.status||'—';
+  document.getElementById('train-state').textContent=d.state||d.status||'—';
+}
+
+function connectTrainStream(runName){
+  closeTrainStream();
+  const url='/api/train/stream'+(runName?`?run=${encodeURIComponent(runName)}`:'');
+  trainEventSource=new EventSource(url);
+  trainEventSource.onmessage=e=>updateTrainProgress(JSON.parse(e.data));
+  trainEventSource.addEventListener('done',e=>{
+    const d=JSON.parse(e.data);
+    updateTrainProgress(d);
+    closeTrainStream();
+    loadModels();
+    toast('✅ เทรนเสร็จสิ้น','success');
+  });
+  trainEventSource.onerror=()=>{
+    document.getElementById('train-progress-state').textContent='สตรีมผิดพลาด';
+    closeTrainStream();
+  };
+}
+
+async function startTraining(){
+  const cfg={data:document.getElementById('train-data').value,model:document.getElementById('train-model').value,epochs:document.getElementById('train-epochs').value,imgsz:document.getElementById('train-imgsz').value,batch:document.getElementById('train-batch').value,name:document.getElementById('train-name').value||`train_${new Date().toISOString().slice(0,16).replace(/[-T:]/g,'')}`};
+  trainExpectedEpochs=Number(cfg.epochs)||0;
+  const r=document.getElementById('train-result');r.innerHTML='<span style="color:var(--amber)">⏳ กำลังส่งคำสั่ง...</span>';
+  const d=await api('/api/train/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
+  if(d.status==='training_started'){r.innerHTML=`<span style="color:var(--green)">✅ เริ่มเทรนแล้ว!</span>`;updateTrainProgress({state:'training',run_name:cfg.name,epoch:0});connectTrainStream(cfg.name);toast('🚀 เริ่มเทรน!','success')}
+  else r.innerHTML=`<span style="color:var(--red)">❌ ${JSON.stringify(d).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
+}
+async function checkTrainStatus(){
+  const d=await api('/api/train/status');
+  document.getElementById('yolo-status-text').textContent=d.status||'offline';
+  document.getElementById('train-state').textContent=d.training?.state||d.status||'—';
+  const trainStatusMsg=d.status==='ready'?'<span style="color:var(--green)">✅ Server พร้อม</span>':`<span style="color:var(--red)">❌ ${JSON.stringify(d).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
+  document.getElementById('train-result').innerHTML=trainStatusMsg;
+}
+async function runValidation(){
+  const r=document.getElementById('train-result');r.innerHTML='<span style="color:var(--amber)">⏳ กำลัง validate...</span>';
+  const d=await api('/api/train/val',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+  if(d.mAP50!==undefined)r.innerHTML=`<span style="color:var(--green)">✅ mAP50: ${d.mAP50} | mAP50-95: ${d.mAP50_95} | P: ${d.precision} | R: ${d.recall}</span>`;
+  else r.innerHTML=`<span style="color:var(--red)">❌ ${d.error||JSON.stringify(d)}</span>`;
+}
+
+// ── Models ──
+async function loadModels(){
+  const d=await api('/api/models');if(d.error)return;
+  document.getElementById('active-model-text').textContent=d.active.active_model?'best.pt':'ไม่มี';
+  document.getElementById('active-model-size').textContent=d.active.active_model?`${d.active.active_size_mb} MB`:'';
+  const el=document.getElementById('total-runs');if(el)el.textContent=d.models.length;
+  const rows=d.models.map(m=>`<tr><td><strong>${m.run}</strong></td><td>${m.epochs||'—'}</td><td>${m.mAP50!==undefined?m.mAP50.toFixed(4):'—'}</td><td>${m.mAP50_95!==undefined?m.mAP50_95.toFixed(4):'—'}</td><td>${m.best_size_mb} MB</td><td>${m.best_pt?`<button class="btn btn-sm btn-green" onclick="deployModel('${m.best_pt.replace(/\\/g,'\\\\')}')">🚀 ใช้งาน</button> <button class="btn btn-sm" onclick="document.getElementById('export-model').value='${m.best_pt.replace(/\\/g,'/')}'">📤</button>`:''}</td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text2)">ยังไม่มี</td></tr>';
+  document.getElementById('models-body').innerHTML=rows;
+  const tb=document.getElementById('train-runs-body');if(tb)tb.innerHTML=rows;
+}
+async function deployModel(p){
+  if(!confirm(`ใช้งาน: ${p}\nBackup โมเดลเดิมไว้ ดำเนินการ?`))return;
+  const d=await api('/api/models/deploy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({source:p})});
+  if(d.ok){toast('✅ ใช้งานสำเร็จ','success');loadModels();loadStats()}else toast('❌ '+d.error,'error');
+}
+async function exportModel(){
+  const m=document.getElementById('export-model').value,f=document.getElementById('export-format').value;
+  if(!m){toast('เลือก model ก่อน','error');return}
+  const el=document.getElementById('export-result');el.textContent='⏳ กำลังส่งออก...';
+  const d=await api('/api/train/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:m,format:f})});
+  el.textContent=d.status==='exported'?`✅ ส่งออก ${f} สำเร็จ`:'❌ '+JSON.stringify(d);
+}
+
+// ── API Docs tabs ──
+function showApiTab(btn,id){
+  btn.parentElement.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
+  ['api-python','api-curl','api-js'].forEach(t=>document.getElementById(t).style.display=t===id?'block':'none');
+}
+
+function refreshAll(){loadStats();toast('🔄 รีเฟรช...')}
+
+// ── Annotator ──────────────────────────────────────────────────────
+const ANN_COLORS=['#25c8f6','#22c55e','#f59e0b','#ef4444','#6c63ff','#ec4899','#14b8a6','#f97316','#a855f7','#06b6d4'];
+let annMode='draw',annClasses=[],annActiveClass=0,annBoxes=[],annUndoStack=[],annRedoStack=[];
+let annImages=[],annIdx=0,annImg=null,annScale=1,annOffX=0,annOffY=0;
+let annDrawing=false,annStartX=0,annStartY=0,annSelected=-1,annDirty=false;
+let annDrag=null,annSmartBusy=false;
+let annNatW=0,annNatH=0,annInited=false;
+
+async function annInit(){
+  if(!annInited){
+    annInited=true;
+    const wrap=document.getElementById('ann-canvas-wrap');
+    const overlay=document.getElementById('ann-overlay');
+    overlay.addEventListener('mousedown',annMouseDown);
+    overlay.addEventListener('mousemove',annMouseMove);
+    overlay.addEventListener('mouseup',annMouseUp);
+    overlay.addEventListener('mouseleave',annMouseUp);
+    overlay.addEventListener('contextmenu',e=>e.preventDefault());
+    wrap.addEventListener('wheel',annWheel,{passive:false});
+    document.addEventListener('keydown',annKeyDown);
+    const fd=await api('/api/folders');
+    if(fd.folders){
+      const sel=document.getElementById('ann-folder-sel');
+      sel.innerHTML=fd.folders.filter(f=>f.count>0).map(f=>`<option value="${f.path}">${f.path} (${f.count})</option>`).join('');
+      if(sel.options.length)annLoadFolder(sel.value);
+    }
+    const cm=await api('/api/stats');
+    if(cm.dataset&&cm.dataset.classes){
+      annClasses=Object.keys(cm.dataset.classes);
+      if(!annClasses.length)annClasses=['object'];
+    }else annClasses=['object'];
+    annRenderClasses();
+  }else if(annImages.length){
+    annLoadImage(annIdx);
+  }
+}
+
+async function annLoadFolder(dir){
+  const d=await api(`/api/images?dir=${encodeURIComponent(dir)}&per_page=9999`);
+  annImages=(d.images||[]).map(i=>({...i,dir}));
+  annIdx=0;
+  if(annImages.length)annLoadImage(0);
+  else{annImg=null;annBoxes=[];annRedraw()}
+}
+
+async function annLoadImage(idx){
+  if(annDirty)await annSave();
+  annIdx=idx;
+  const info=annImages[idx];
+  if(!info)return;
+  document.getElementById('ann-img-index').textContent=`${idx+1} / ${annImages.length}`;
+  document.getElementById('ann-img-name').textContent=info.name;
+  const split=info.dir.includes('/train')?'train':info.dir.includes('/val')?'val':'';
+  const splitEl=document.getElementById('ann-img-split');
+  if(split){splitEl.textContent=split;splitEl.style.display=''}else splitEl.style.display='none';
+  annImg=new Image();
+  annImg.onload=()=>{
+    annNatW=annImg.naturalWidth;annNatH=annImg.naturalHeight;
+    document.getElementById('ann-img-dim').textContent=`${annNatW} × ${annNatH}`;
+    annFitCanvas();
+    annLoadLabels(info.path);
+  };
+  annImg.src=`/api/image/${info.path}`;
+}
+
+async function annLoadLabels(path){
+  annBoxes=[];annUndoStack=[];annRedoStack=[];annSelected=-1;
+  const d=await api(`/api/label/${path}`);
+  if(d.exists&&d.labels){
+    annBoxes=d.labels.map(l=>({cls:l.class_id,cx:l.cx,cy:l.cy,w:l.w,h:l.h}));
+    annBoxes.forEach(b=>{while(annClasses.length<=b.cls)annClasses.push(`class_${annClasses.length}`);});
+    annRenderClasses();
+  }
+  annDirty=false;
+  annUpdateCount();annRedraw();
+}
+
+function annFitCanvas(){
+  const wrap=document.getElementById('ann-canvas-wrap');
+  const ww=wrap.clientWidth,wh=wrap.clientHeight;
+  annScale=Math.min(ww/annNatW,wh/annNatH,1);
+  annOffX=(ww-annNatW*annScale)/2;
+  annOffY=(wh-annNatH*annScale)/2;
+  const c=document.getElementById('ann-canvas'),o=document.getElementById('ann-overlay');
+  [c,o].forEach(el=>{el.width=ww;el.height=wh});
+  document.getElementById('ann-zoom-label').textContent=Math.round(annScale*100)+'%';
+  annRedraw();
+}
+
+function annRedraw(){
+  const c=document.getElementById('ann-canvas'),ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  if(annImg&&annImg.complete){
+    ctx.drawImage(annImg,annOffX,annOffY,annNatW*annScale,annNatH*annScale);
+  }
+  const o=document.getElementById('ann-overlay'),octx=o.getContext('2d');
+  octx.clearRect(0,0,o.width,o.height);
+  annBoxes.forEach((b,i)=>{
+    const x=(b.cx-b.w/2)*annNatW*annScale+annOffX;
+    const y=(b.cy-b.h/2)*annNatH*annScale+annOffY;
+    const w=b.w*annNatW*annScale,h=b.h*annNatH*annScale;
+    const col=ANN_COLORS[b.cls%ANN_COLORS.length];
+    octx.strokeStyle=col;octx.lineWidth=i===annSelected?3:2;
+    if(i===annSelected){octx.setLineDash([6,3])}else{octx.setLineDash([])}
+    octx.strokeRect(x,y,w,h);
+    const label=annClasses[b.cls]||`class_${b.cls}`;
+    octx.font='bold 12px sans-serif';
+    const tw=octx.measureText(label).width;
+    octx.fillStyle=col;octx.fillRect(x,y-18,tw+10,18);
+    octx.fillStyle='#fff';octx.fillText(label,x+5,y-5);
+    octx.setLineDash([]);
+    if(i===annSelected)annDrawHandles(octx,x,y,w,h,col);
+  });
+}
+
+function annDrawHandles(ctx,x,y,w,h,col){
+  ctx.setLineDash([]);
+  ctx.fillStyle=col;
+  ctx.strokeStyle='#0f1117';
+  ctx.lineWidth=2;
+  annHandleRects(x,y,w,h).forEach(hd=>{
+    ctx.fillRect(hd.x-4,hd.y-4,8,8);
+    ctx.strokeRect(hd.x-4,hd.y-4,8,8);
+  });
+}
+
+function annHandleRects(x,y,w,h){
+  return[
+    {handle:'nw',x,y,cursor:'nwse-resize'},
+    {handle:'n',x:x+w/2,y,cursor:'ns-resize'},
+    {handle:'ne',x:x+w,y,cursor:'nesw-resize'},
+    {handle:'e',x:x+w,y:y+h/2,cursor:'ew-resize'},
+    {handle:'se',x:x+w,y:y+h,cursor:'nwse-resize'},
+    {handle:'s',x:x+w/2,y:y+h,cursor:'ns-resize'},
+    {handle:'sw',x,y:y+h,cursor:'nesw-resize'},
+    {handle:'w',x,y:y+h/2,cursor:'ew-resize'},
+  ];
+}
+
+function annToImg(mx,my){
+  return[(mx-annOffX)/(annNatW*annScale),(my-annOffY)/(annNatH*annScale)];
+}
+
+function annMouseDown(e){
+  if(e.button===2)return;
+  const rect=e.target.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const[ix,iy]=annToImg(mx,my);
+  if(ix<0||ix>1||iy<0||iy>1)return;
+  const hit=annHitTest(mx,my,true);
+  if(hit.index>=0&&!e.shiftKey){
+    annSelected=hit.index;
+    annPushUndo();
+    const b=annBoxes[annSelected];
+    annDrag={type:hit.handle?'resize':'move',handle:hit.handle,startX:ix,startY:iy,orig:{...b}};
+    annRedraw();
+    return;
+  }
+  if(annMode==='smart'){
+    annSelected=-1;
+    annRedraw();
+    annAutoDetect({point:{x:ix,y:iy},localOnly:true});
+    return;
+  }
+  annSelected=-1;
+  annDrawing=true;annStartX=ix;annStartY=iy;
+}
+
+function annMouseMove(e){
+  const rect=e.target.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const[ix,iy]=annToImg(mx,my);
+  if(annDrag){
+    annApplyDrag(ix,iy);
+    annDirty=true;annUpdateCount();annRenderClasses();annRedraw();
+    return;
+  }
+  if(!annDrawing){
+    const hit=annHitTest(mx,my,true);
+    document.getElementById('ann-canvas-wrap').style.cursor=hit.cursor||(annMode==='smart'?'cell':'crosshair');
+    return;
+  }
+  const o=document.getElementById('ann-overlay'),octx=o.getContext('2d');
+  annRedraw();
+  const x1=annStartX*annNatW*annScale+annOffX,y1=annStartY*annNatH*annScale+annOffY;
+  const x2=ix*annNatW*annScale+annOffX,y2=iy*annNatH*annScale+annOffY;
+  octx.strokeStyle=ANN_COLORS[annActiveClass%ANN_COLORS.length];
+  octx.lineWidth=2;octx.setLineDash([4,4]);
+  octx.strokeRect(x1,y1,x2-x1,y2-y1);octx.setLineDash([]);
+}
+
+function annMouseUp(e){
+  if(annDrag){
+    annDrag=null;
+    annDirty=true;annUpdateCount();annRedraw();
+    return;
+  }
+  if(!annDrawing)return;
+  annDrawing=false;
+  const rect=e.target.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const[ix,iy]=annToImg(mx,my);
+  const x1=Math.min(annStartX,ix),y1=Math.min(annStartY,iy);
+  const x2=Math.max(annStartX,ix),y2=Math.max(annStartY,iy);
+  const w=x2-x1,h=y2-y1;
+  if(w<0.005||h<0.005)return;
+  annPushUndo();
+  annBoxes.push({cls:annActiveClass,cx:x1+w/2,cy:y1+h/2,w,h});
+  annDirty=true;annSelected=annBoxes.length-1;
+  annUpdateCount();annRedraw();
+}
+
+function annApplyDrag(ix,iy){
+  if(!annDrag||annSelected<0)return;
+  ix=Math.max(0,Math.min(1,ix));iy=Math.max(0,Math.min(1,iy));
+  const b=annBoxes[annSelected],o=annDrag.orig;
+  if(annDrag.type==='move'){
+    b.cx=Math.max(o.w/2,Math.min(1-o.w/2,o.cx+(ix-annDrag.startX)));
+    b.cy=Math.max(o.h/2,Math.min(1-o.h/2,o.cy+(iy-annDrag.startY)));
+    return;
+  }
+  let x1=o.cx-o.w/2,y1=o.cy-o.h/2,x2=o.cx+o.w/2,y2=o.cy+o.h/2;
+  const h=annDrag.handle;
+  if(h.includes('w'))x1=ix;
+  if(h.includes('e'))x2=ix;
+  if(h.includes('n'))y1=iy;
+  if(h.includes('s'))y2=iy;
+  if(x1>x2)[x1,x2]=[x2,x1];
+  if(y1>y2)[y1,y2]=[y2,y1];
+  x1=Math.max(0,Math.min(1,x1));x2=Math.max(0,Math.min(1,x2));
+  y1=Math.max(0,Math.min(1,y1));y2=Math.max(0,Math.min(1,y2));
+  if(x2-x1<0.005||y2-y1<0.005)return;
+  b.cx=(x1+x2)/2;b.cy=(y1+y2)/2;b.w=x2-x1;b.h=y2-y1;
+}
+
+function annHitTest(mx,my,detail=false){
+  if(annSelected>=0&&annBoxes[annSelected]){
+    const b=annBoxes[annSelected];
+    const x=(b.cx-b.w/2)*annNatW*annScale+annOffX;
+    const y=(b.cy-b.h/2)*annNatH*annScale+annOffY;
+    const w=b.w*annNatW*annScale,h=b.h*annNatH*annScale;
+    for(const hd of annHandleRects(x,y,w,h)){
+      if(Math.abs(mx-hd.x)<=6&&Math.abs(my-hd.y)<=6)return detail?{index:annSelected,handle:hd.handle,cursor:hd.cursor}:annSelected;
+    }
+  }
+  for(let i=annBoxes.length-1;i>=0;i--){
+    const b=annBoxes[i];
+    const x=(b.cx-b.w/2)*annNatW*annScale+annOffX;
+    const y=(b.cy-b.h/2)*annNatH*annScale+annOffY;
+    const w=b.w*annNatW*annScale,h=b.h*annNatH*annScale;
+    if(mx>=x&&mx<=x+w&&my>=y&&my<=y+h)return detail?{index:i,handle:null,cursor:'move'}:i;
+  }
+  return detail?{index:-1,handle:null,cursor:''}:-1;
+}
+
+function annWheel(e){
+  e.preventDefault();
+  const delta=e.deltaY>0?0.9:1.1;
+  annScale=Math.max(0.2,Math.min(5,annScale*delta));
+  const wrap=document.getElementById('ann-canvas-wrap');
+  annOffX=(wrap.clientWidth-annNatW*annScale)/2;
+  annOffY=(wrap.clientHeight-annNatH*annScale)/2;
+  const c=document.getElementById('ann-canvas'),o=document.getElementById('ann-overlay');
+  document.getElementById('ann-zoom-label').textContent=Math.round(annScale*100)+'%';
+  annRedraw();
+}
+
+function annPushUndo(){annUndoStack.push(JSON.parse(JSON.stringify(annBoxes)));annRedoStack=[];if(annUndoStack.length>50)annUndoStack.shift()}
+function annUndo(){if(!annUndoStack.length)return;annRedoStack.push(JSON.parse(JSON.stringify(annBoxes)));annBoxes=annUndoStack.pop();annDirty=true;annSelected=-1;annUpdateCount();annRedraw()}
+function annRedo(){if(!annRedoStack.length)return;annUndoStack.push(JSON.parse(JSON.stringify(annBoxes)));annBoxes=annRedoStack.pop();annDirty=true;annSelected=-1;annUpdateCount();annRedraw()}
+function annDeleteSelected(){if(annSelected<0)return;annPushUndo();annBoxes.splice(annSelected,1);annSelected=-1;annDirty=true;annUpdateCount();annRedraw()}
+function annClearAll(){if(!annBoxes.length)return;annPushUndo();annBoxes=[];annSelected=-1;annDirty=true;annUpdateCount();annRedraw()}
+
+function annKeyDown(e){
+  if(!document.getElementById('page-annotator').classList.contains('active'))return;
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')return;
+  if(e.key==='Delete'||e.key==='Backspace'){annDeleteSelected();e.preventDefault()}
+  if(e.ctrlKey&&e.key==='z'){annUndo();e.preventDefault()}
+  if(e.ctrlKey&&e.key==='y'){annRedo();e.preventDefault()}
+  if(e.ctrlKey&&e.key==='s'){annSave();e.preventDefault()}
+  if(e.key==='ArrowLeft'){annPrev();e.preventDefault()}
+  if(e.key==='ArrowRight'){annNext();e.preventDefault()}
+}
+
+function annPrev(){if(annIdx>0)annLoadImage(annIdx-1)}
+function annNext(){if(annIdx<annImages.length-1)annLoadImage(annIdx+1)}
+
+function annUpdateCount(){document.getElementById('ann-count-badge').textContent=`${annBoxes.length} ป้ายกำกับ`}
+
+function setAnnMode(m){
+  annMode=m;
+  document.getElementById('ann-mode-draw').style.background=m==='draw'?'var(--accent)':'var(--bg3)';
+  document.getElementById('ann-mode-draw').style.color=m==='draw'?'#000':'var(--text)';
+  document.getElementById('ann-mode-smart').style.background=m==='smart'?'var(--accent)':'var(--bg3)';
+  document.getElementById('ann-mode-smart').style.color=m==='smart'?'#000':'var(--text)';
+  document.getElementById('ann-canvas-wrap').style.cursor=m==='smart'?'cell':'crosshair';
+}
+
+function annRenderClasses(){
+  const el=document.getElementById('ann-class-list');
+  const search=(document.getElementById('ann-class-search').value||'').toLowerCase();
+  el.innerHTML=annClasses.filter(c=>c.toLowerCase().includes(search)).map((c,i)=>{
+    const realIdx=annClasses.indexOf(c);
+    const col=ANN_COLORS[realIdx%ANN_COLORS.length];
+    const count=annBoxes.filter(b=>b.cls===realIdx).length;
+    return`<div onclick="annSelectClass(${realIdx})" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;border-left:3px solid ${realIdx===annActiveClass?col:'transparent'};background:${realIdx===annActiveClass?'rgba(37,200,246,.08)':'transparent'};transition:all .15s" onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background='${realIdx===annActiveClass?'rgba(37,200,246,.08)':'transparent'}'"><span style="width:12px;height:12px;border-radius:50%;background:${col};flex-shrink:0"></span><span style="flex:1;font-size:13px;color:${realIdx===annActiveClass?'var(--text)':'var(--text2)'}">${c}</span><span style="font-size:11px;color:var(--text2)">${count}</span></div>`
+  }).join('');
+}
+document.getElementById('ann-class-search')?.addEventListener('input',annRenderClasses);
+
+function annSelectClass(i){annActiveClass=i;annRenderClasses();if(annSelected>=0){annPushUndo();annBoxes[annSelected].cls=i;annDirty=true;annRedraw()}}
+
+function annAddClass(){
+  const inp=document.getElementById('ann-new-class');
+  const name=inp.value.trim();
+  if(!name||annClasses.includes(name))return;
+  annClasses.push(name);annActiveClass=annClasses.length-1;
+  inp.value='';annRenderClasses();
+}
+
+async function annSave(){
+  if(!annImages.length)return;
+  const info=annImages[annIdx];
+  const labels=annBoxes.map(b=>({class_id:b.cls,cx:b.cx,cy:b.cy,w:b.w,h:b.h}));
+  const d=await api('/api/label/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_path:info.path,labels})});
+  if(d.ok){toast(`💾 บันทึก ${labels.length} labels สำเร็จ`,'success');annDirty=false}else toast('❌ '+d.error,'error');
+}
+
+function annFilterDetectionsForPoint(detections,point,iw,ih){
+  if(!point)return detections;
+  const px=point.x*iw,py=point.y*ih;
+  const containing=detections.filter(det=>{
+    const[x1,y1,x2,y2]=det.bbox;
+    return px>=x1&&px<=x2&&py>=y1&&py<=y2;
+  });
+  if(containing.length)return containing;
+  return detections
+    .map(det=>{
+      const[x1,y1,x2,y2]=det.bbox;
+      const cx=(x1+x2)/2,cy=(y1+y2)/2;
+      return{det,dist:Math.hypot(cx-px,cy-py)};
+    })
+    .sort((a,b)=>a.dist-b.dist)
+    .slice(0,1)
+    .map(x=>x.det);
+}
+
+async function annAutoDetect(opts={}){
+  if(!annImages.length)return;
+  if(annSmartBusy)return;
+  annSmartBusy=true;
+  const info=annImages[annIdx];
+  try{
+    toast(opts.point?'🤖 กำลังตรวจจับอัจฉริยะใกล้จุดที่คลิก...':'🔍 กำลังตรวจจับอัตโนมัติ...','');
+    const r=await fetch(`/api/image/${info.path}`);
+    const blob=await r.blob();
+    const file=new File([blob],info.name,{type:blob.type});
+    const form=new FormData();
+    form.append('image',file);form.append('conf','0.25');
+    if(opts.point){form.append('point_x',opts.point.x);form.append('point_y',opts.point.y)}
+    let d=opts.localOnly?await api('/api/predict/local',{method:'POST',body:form}):await api('/api/predict',{method:'POST',body:form});
+    if(d.error){
+      d=opts.localOnly
+        ?await api('/api/predict',{method:'POST',body:form})
+        :await api('/api/predict/local',{method:'POST',body:form});
+    }
+    if(d.error){toast('❌ '+d.error,'error');return}
+    if(!d.detections||!d.detections.length){toast('ไม่พบวัตถุ','');return}
+    const iw=d.image_width||annNatW,ih=d.image_height||annNatH;
+    const detections=annFilterDetectionsForPoint(d.detections,opts.point,iw,ih);
+    if(!detections.length){toast('ไม่พบวัตถุใกล้จุดที่คลิก','');return}
+    annPushUndo();
+    detections.forEach(det=>{
+      const[x1,y1,x2,y2]=det.bbox;
+      const cx=(x1+x2)/2/iw,cy=(y1+y2)/2/ih,w=(x2-x1)/iw,h=(y2-y1)/ih;
+      let clsIdx=annClasses.indexOf(det.class_name);
+      if(clsIdx<0){annClasses.push(det.class_name);clsIdx=annClasses.length-1}
+      annBoxes.push({cls:clsIdx,cx,cy,w,h});
+      annSelected=annBoxes.length-1;
+    });
+    annDirty=true;annUpdateCount();annRenderClasses();annRedraw();
+    toast(`✅ ตรวจพบ ${detections.length} วัตถุ`,'success');
+  }finally{
+    annSmartBusy=false;
+  }
+}
+
+loadStats();
+</script>
+</body>
+</html>

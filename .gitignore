@@ -1,0 +1,10 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+dist/
+*.pt
+*.onnx
+dataset/
+runs/
+models/*.pt

@@ -1,0 +1,148 @@
+.active-model-card {
+  background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(34,197,94,0.08));
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.active-model-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.active-model-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(99,102,241,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+.active-model-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+.active-model-meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  display: flex;
+  gap: 16px;
+}
+
+/* Models table */
+.models-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.models-table-wrap table {
+  margin: 0;
+  min-width: 700px;
+}
+.models-table-wrap th {
+  background: var(--bg-card);
+}
+.model-actions {
+  display: flex;
+  gap: 6px;
+}
+.model-actions .btn {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+/* Export section */
+.export-section {
+  margin-top: 24px;
+}
+.export-form {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.export-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 180px;
+}
+.export-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.export-field select {
+  width: 100%;
+}
+.export-form .btn {
+  height: 38px;
+  white-space: nowrap;
+}
+
+/* Confirm dialog overlay */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.confirm-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  min-width: 360px;
+  max-width: 440px;
+}
+.confirm-dialog h3 {
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+.confirm-dialog p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Toast */
+.mm-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  z-index: 1100;
+  animation: mm-toast-in 0.3s ease;
+}
+.mm-toast.success {
+  background: var(--bg-card);
+  border: 1px solid var(--green);
+  color: var(--green);
+}
+.mm-toast.error {
+  background: var(--bg-card);
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+@keyframes mm-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}

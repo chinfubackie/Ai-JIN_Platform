@@ -1,0 +1,81 @@
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: aijin-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aijin
+      POSTGRES_PASSWORD: aijin_secret
+      POSTGRES_DB: aijin_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aijin -d aijin_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Label Studio ───────────────────────────────────────────────────
+  label-studio:
+    image: heartexlabs/label-studio:latest
+    container_name: aijin-label-studio
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DJANGO_DB: default
+      POSTGRE_NAME: aijin_ls
+      POSTGRE_USER: aijin
+      POSTGRE_PASSWORD: aijin_secret
+      POSTGRE_HOST: postgres
+      POSTGRE_PORT: 5432
+      LABEL_STUDIO_HOST: http://localhost:8085
+      LABEL_STUDIO_USERNAME: admin@aijin.local
+      LABEL_STUDIO_PASSWORD: Admin1234!
+    volumes:
+      - label_studio_data:/label-studio/data
+      - ${DATASET_PATH:-./dataset}:/label-studio/files:ro
+    ports:
+      - "8085:8085"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8085/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 5
+
+  # ── Ai-JIN Flask API ───────────────────────────────────────────────
+  webapp:
+    build:
+      context: ./webapp
+      dockerfile: Dockerfile
+    container_name: aijin-webapp
+    restart: unless-stopped
+    depends_on:
+      label-studio:
+        condition: service_healthy
+    environment:
+      LABEL_STUDIO_URL: http://label-studio:8085
+      LABEL_STUDIO_TOKEN: ${LABEL_STUDIO_TOKEN:-}
+      YOLO_TRAIN_URL: ${YOLO_TRAIN_URL:-http://host.docker.internal:8111}
+      DATASET_PATH: /dataset
+      RUNS_PATH: /runs
+      MODEL_PATH: /models
+    volumes:
+      - ${DATASET_PATH:-./dataset}:/dataset:ro
+      - ${RUNS_PATH:-./runs}:/runs:ro
+      - ${MODEL_PATH:-./models}:/models:ro
+    ports:
+      - "8501:8501"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
+  label_studio_data:

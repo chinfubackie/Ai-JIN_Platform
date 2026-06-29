@@ -1,0 +1,600 @@
+/* ===== Dashboard Loading ===== */
+.dash-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 60vh;
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+.dash-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: dash-spin 0.8s linear infinite;
+}
+@keyframes dash-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== Welcome Banner ===== */
+.dash-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(124,92,252,0.08) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px 36px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  position: relative;
+}
+.dash-welcome-text {
+  flex: 1;
+  min-width: 0;
+}
+.dash-welcome-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dash-wave {
+  display: inline-block;
+  animation: dash-wave-anim 2s ease-in-out infinite;
+  transform-origin: 70% 70%;
+}
+@keyframes dash-wave-anim {
+  0%, 100% { transform: rotate(0deg); }
+  10% { transform: rotate(14deg); }
+  20% { transform: rotate(-8deg); }
+  30% { transform: rotate(14deg); }
+  40% { transform: rotate(-4deg); }
+  50% { transform: rotate(10deg); }
+  60% { transform: rotate(0deg); }
+}
+.dash-welcome-sub {
+  margin-top: 8px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.dash-welcome-art {
+  width: 200px;
+  height: 160px;
+  flex-shrink: 0;
+  margin-left: 24px;
+}
+.dash-welcome-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ===== Quick Stats Row ===== */
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.dash-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.25s ease;
+  cursor: default;
+}
+.dash-stat-card:hover {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-card-hover));
+  box-shadow: 0 0 20px rgba(124,92,252,0.08);
+  transform: translateY(-2px);
+}
+.dash-stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.dash-stat-number {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+.dash-stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.dash-stat-growth {
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 600;
+}
+.dash-stat-growth::before {
+  content: '';
+}
+
+/* ===== Section headers ===== */
+.dash-section {
+  margin-bottom: 28px;
+}
+.dash-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.dash-section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.dash-view-all {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.dash-view-all:hover {
+  background: rgba(124,92,252,0.1);
+}
+
+/* ===== Datasets Grid ===== */
+.dash-datasets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.dash-dataset-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+.dash-dataset-card:hover {
+  transform: scale(1.02);
+  border-color: var(--accent);
+  box-shadow: 0 0 24px rgba(124,92,252,0.12);
+}
+.dash-dataset-thumb {
+  position: relative;
+  height: 130px;
+  background: var(--bg-dark);
+  overflow: hidden;
+}
+.dash-dataset-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dash-dataset-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-card-hover) 100%);
+}
+.dash-dataset-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.dash-dataset-badge.private {
+  background: rgba(124,92,252,0.2);
+  color: var(--accent-hover);
+}
+.dash-dataset-badge.public {
+  background: rgba(34,197,94,0.2);
+  color: var(--green);
+}
+.dash-dataset-menu {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(10,11,20,0.6);
+  border: none;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+}
+.dash-dataset-card:hover .dash-dataset-menu {
+  opacity: 1;
+}
+.dash-dataset-info {
+  padding: 12px 14px;
+}
+.dash-dataset-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-dataset-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.dash-dataset-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 190px;
+  color: var(--text-muted);
+  font-size: 13px;
+  border-style: dashed;
+}
+
+/* ===== Recent Projects Row ===== */
+.dash-projects-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+.dash-project-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  transition: all 0.2s ease;
+}
+.dash-project-card:hover {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-card-hover));
+}
+.dash-project-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+}
+.dash-project-body {
+  flex: 1;
+  min-width: 0;
+}
+.dash-project-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.dash-project-type {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(124,92,252,0.12);
+  color: var(--accent-hover);
+  margin-bottom: 8px;
+}
+.dash-project-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dash-progress-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.dash-progress-bar.wide {
+  height: 6px;
+  margin-top: 8px;
+}
+.dash-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+.dash-progress-pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 32px;
+  text-align: right;
+}
+.dash-project-updated {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dash-project-new {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  border-style: dashed;
+  cursor: pointer;
+  min-height: 140px;
+}
+.dash-project-new:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ===== Twin cards (Training + Exports, Health + Activity) ===== */
+.dash-twin {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.dash-twin-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+/* Training list */
+.dash-train-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dash-train-item {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.dash-train-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.dash-train-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dash-train-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.badge-accent {
+  background: rgba(124,92,252,0.15);
+  color: var(--accent-hover);
+}
+.dash-train-status {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+}
+.dash-train-status.running {
+  color: var(--accent);
+}
+.dash-train-status.done {
+  color: var(--green);
+}
+.dash-train-eta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Export list */
+.dash-export-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dash-export-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.dash-export-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.dash-export-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+.dash-export-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Empty states */
+.dash-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ===== Dataset Health ===== */
+.dash-health {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-top: 12px;
+}
+.dash-health-chart {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+}
+.dash-health-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+}
+.dash-health-pct {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--green);
+  line-height: 1.1;
+}
+.dash-health-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.dash-health-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dash-health-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.dash-health-row strong {
+  margin-left: auto;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* ===== Activity Feed ===== */
+.dash-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 8px;
+}
+.dash-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dash-activity-item:last-child {
+  border-bottom: none;
+}
+.dash-activity-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dash-activity-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
+}
+.dash-activity-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 1100px) {
+  .dash-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .dash-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dash-twin {
+    grid-template-columns: 1fr;
+  }
+  .dash-welcome {
+    flex-direction: column;
+    text-align: center;
+    padding: 24px;
+  }
+  .dash-welcome-art {
+    margin-left: 0;
+    margin-top: 16px;
+  }
+  .dash-welcome-title {
+    justify-content: center;
+    font-size: 22px;
+  }
+}
+@media (max-width: 600px) {
+  .dash-stats {
+    grid-template-columns: 1fr;
+  }
+  .dash-datasets-grid {
+    grid-template-columns: 1fr;
+  }
+  .dash-projects-row {
+    grid-template-columns: 1fr;
+  }
+}

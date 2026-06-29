@@ -1,0 +1,365 @@
+/* ── LM Assistant Panel ── */
+.lm-panel {
+  width: 340px;
+  min-width: 340px;
+  background: var(--bg-card);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateX(0);
+  transition: transform 0.25s ease, width 0.25s ease, min-width 0.25s ease,
+              margin 0.25s ease, opacity 0.25s ease;
+  opacity: 1;
+  margin-left: 12px;
+}
+
+.lm-panel.lm-hidden {
+  width: 0;
+  min-width: 0;
+  margin-left: 0;
+  transform: translateX(100%);
+  opacity: 0;
+  border-left: none;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.lm-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.lm-header-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), #a855f7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.lm-header-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.lm-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.12s;
+}
+.lm-close-btn:hover {
+  color: var(--text-primary);
+}
+
+/* ── Scrollable body ── */
+.lm-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+/* ── Collapsible sections ── */
+.lm-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.lm-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.12s;
+}
+.lm-section-header:hover {
+  background: var(--bg-card-hover);
+}
+
+.lm-section-chevron {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.lm-section-chevron.open {
+  transform: rotate(90deg);
+}
+
+.lm-section-title {
+  flex: 1;
+}
+
+.lm-section-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(124, 92, 252, 0.15);
+  color: var(--accent);
+}
+
+.lm-section-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.lm-section-content.open {
+  max-height: 2000px;
+}
+
+/* ── Detection cards ── */
+.lm-det-list {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lm-det-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.12s, background 0.12s;
+  cursor: default;
+}
+.lm-det-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-card-hover);
+}
+
+.lm-det-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lm-det-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.lm-det-thumb svg {
+  color: var(--text-muted);
+}
+
+.lm-det-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.lm-det-class {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lm-det-bbox {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  margin-top: 2px;
+}
+
+/* ── Confidence badges ── */
+.lm-conf {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.lm-conf.high {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--green);
+}
+.lm-conf.mid {
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--yellow);
+}
+.lm-conf.low {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red);
+}
+
+/* ── Refinement card ── */
+.lm-refine-card {
+  margin: 0 12px 12px;
+  padding: 10px 12px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.lm-refine-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.lm-refine-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.lm-refine-coords {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.lm-refine-coords.suggested {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.lm-refine-class {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.lm-refine-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--cyan);
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--cyan);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.lm-refine-btn:hover {
+  background: rgba(6, 182, 212, 0.2);
+}
+
+/* ── Apply button ── */
+.lm-apply-wrap {
+  padding: 8px 12px 12px;
+}
+
+.lm-apply-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), #a855f7);
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+}
+.lm-apply-btn:hover {
+  filter: brightness(1.15);
+}
+.lm-apply-btn:active {
+  transform: scale(0.98);
+}
+.lm-apply-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+
+/* ── Footer status ── */
+.lm-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.lm-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  flex-shrink: 0;
+}
+.lm-status-dot.online {
+  background: var(--green);
+}
+
+.lm-status-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.lm-status-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ── Empty state ── */
+.lm-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ── Loading state ── */
+.lm-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.lm-loading .ann-spinner {
+  width: 14px;
+  height: 14px;
+}

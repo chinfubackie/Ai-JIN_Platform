@@ -1,0 +1,11 @@
+# Ultralytics AGPL-3.0 License - https://ultralytics.com/license
+
+# ByteTrack config for conveyor flow where 2+ parts can pass close together.
+# Keep this filename as "bytetrack.yaml" because Ultralytics resolves tracker configs by this standard name.
+tracker_type: bytetrack
+track_high_thresh: 0.5
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+track_buffer: 90
+match_thresh: 0.9
+fuse_score: True
