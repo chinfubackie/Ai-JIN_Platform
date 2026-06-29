@@ -8,6 +8,8 @@ import DataImport from './pages/DataImport'
 import Training from './pages/Training'
 import ModelManagement from './pages/ModelManagement'
 import ApiDocs from './pages/ApiDocs'
+import Projects from './pages/Projects'
+import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -23,6 +25,9 @@ export default function App() {
           <Route path="/training" element={<Training />} />
           <Route path="/models" element={<ModelManagement />} />
           <Route path="/api-docs" element={<ApiDocs />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/team" element={<Navigate to="/settings" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -40,7 +40,7 @@ export const api = {
     fetchJSON('/train/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config }),
+      body: JSON.stringify(config),
     }),
   trainStatus: () => fetchJSON('/train/status'),
   trainExport: (model, format) =>

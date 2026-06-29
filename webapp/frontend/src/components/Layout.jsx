@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   BarChart3, Search, Images, PenTool, Upload,
   Brain, Package, Zap, ChevronLeft, Menu,
@@ -37,6 +37,7 @@ const TOP_TABS = [
 /* ---- Sidebar nav items ---- */
 const SIDEBAR_NAV = [
   { to: '/dashboard', icon: Home, label: 'Home' },
+  { to: '/projects', icon: FolderOpen, label: 'Projects' },
   { to: '/dataset', icon: Images, label: 'Datasets' },
   { to: '/annotator', icon: PenTool, label: 'Annotate' },
   { to: '/training', icon: Brain, label: 'Train' },
@@ -140,6 +141,7 @@ export default function Layout() {
   const [darkMode, setDarkMode] = useState(true)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
 
   return (
     <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''} ${darkMode ? 'dark' : 'light'}`}>
@@ -168,7 +170,7 @@ export default function Layout() {
             <Bell size={18} />
             <span className="notif-badge">3</span>
           </button>
-          <button className="topbar-icon-btn" title="Settings">
+          <button className="topbar-icon-btn" title="Settings" onClick={() => navigate('/settings')}>
             <Settings size={18} />
           </button>
           <div className="topbar-user-wrap">

@@ -30,11 +30,19 @@ export default function ModelManagement() {
 
   const loadModels = () => {
     setLoading(true)
-    api.models()
-      .then(raw => {
-        const data = raw?.models || raw || []
+    // Load DB registry first, merge with file scan
+    Promise.allSettled([api.registry(), api.models()])
+      .then(([regRes, scanRes]) => {
+        const registry = regRes.status === 'fulfilled' ? (regRes.value || []) : []
+        const scanned  = scanRes.status === 'fulfilled'
+          ? (scanRes.value?.models || scanRes.value || [])
+          : []
+        // Prefer DB registry; fall back to file scan if registry empty
+        const data = registry.length ? registry : scanned
         setModels(Array.isArray(data) ? data : [])
-        if (data?.length && !exportModel) setExportModel(data[0].best_pt || data[0].path || data[0].name)
+        if (data?.length && !exportModel) {
+          setExportModel(data[0].path || data[0].best_pt || data[0].name)
+        }
       })
       .catch(() => showToast('โหลดรายการโมเดลไม่สำเร็จ', 'error'))
       .finally(() => setLoading(false))
@@ -47,10 +55,13 @@ export default function ModelManagement() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  async function handleDeploy(path) {
-    setDeploying(path)
+  async function handleDeploy(model) {
+    const key = model.id || model.path
+    setDeploying(key)
     try {
-      await api.deploy(path)
+      // Use DB registry deploy if model has an id, else legacy file deploy
+      if (model.id) await api.registryDeploy(model.id)
+      else await api.deploy(model.path || model.best_pt)
       showToast('ติดตั้งโมเดลสำเร็จ')
       loadModels()
     } catch {
@@ -161,14 +172,14 @@ export default function ModelManagement() {
                     </td>
                     <td>
                       <div className="model-actions">
-                        {!m.active && (
+                        {!m.active && !m.deployed && (
                           <button
                             className="btn btn-primary"
-                            disabled={deploying === (m.best_pt || m.path)}
-                            onClick={() => handleDeploy(m.best_pt || m.path)}
+                            disabled={deploying === (m.id || m.best_pt || m.path)}
+                            onClick={() => handleDeploy(m)}
                           >
                             <Rocket size={14} />
-                            {deploying === (m.best_pt || m.path) ? 'กำลัง...' : 'ติดตั้ง'}
+                            {deploying === (m.id || m.best_pt || m.path) ? 'กำลัง...' : 'ติดตั้ง'}
                           </button>
                         )}
                         <button
