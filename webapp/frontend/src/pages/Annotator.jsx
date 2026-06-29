@@ -643,8 +643,7 @@ export default function Annotator() {
         </div>
       </div>
 
-      <div className="annotator-layout"
-        style={{ gridTemplateColumns: `${leftOpen ? '220px' : '32px'} 1fr ${rightOpen ? '200px' : '32px'}` }}>
+      <div className="annotator-layout">
         {/* ── Left: class panel ── */}
         <div className={`ann-sidebar${leftOpen ? '' : ' collapsed'}`}>
           <div className="ann-panel-header">

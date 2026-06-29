@@ -2,8 +2,9 @@
 .ann-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px);
+  height: 100%;
   overflow: hidden;
+  padding: 12px 16px;
 }
 
 /* ── Top toolbar ── */
@@ -34,11 +35,12 @@
 
 /* ── Main 3-column layout ── */
 .annotator-layout {
-  display: grid;
-  grid-template-columns: 220px 1fr 200px;
+  display: flex;
+  flex-direction: row;
   gap: 8px;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* ── Panel header (collapse toggle row) ── */
@@ -83,6 +85,7 @@
 
 /* ── Left sidebar ── */
 .ann-sidebar {
+  flex: 0 0 220px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -90,7 +93,10 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
-  transition: all 0.15s ease;
+  transition: flex-basis 0.15s ease;
+}
+.ann-sidebar.collapsed {
+  flex-basis: 32px;
 }
 .ann-sidebar.collapsed,
 .ann-ann-panel.collapsed {
@@ -203,10 +209,12 @@
 
 /* ── Center canvas column ── */
 .ann-canvas-col {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-height: 0;
+  min-width: 0;
 }
 .ann-canvas-wrap {
   flex: 1;
@@ -282,6 +290,7 @@
 
 /* ── Right annotation list ── */
 .ann-ann-panel {
+  flex: 0 0 200px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -289,7 +298,10 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
-  transition: all 0.15s ease;
+  transition: flex-basis 0.15s ease;
+}
+.ann-ann-panel.collapsed {
+  flex-basis: 32px;
 }
 .ann-ann-list {
   flex: 1;

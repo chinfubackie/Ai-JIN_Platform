@@ -582,6 +582,14 @@ body {
 .sidebar-collapsed .main-content {
   margin-left: var(--sidebar-collapsed-w);
 }
+/* Full-bleed pages that manage their own layout */
+.main-content:has(.ann-page) {
+  padding: 0;
+  height: calc(100vh - var(--topbar-h));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
 /* ===================================================
    COMMON REUSABLE STYLES
