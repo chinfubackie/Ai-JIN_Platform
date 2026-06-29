@@ -371,6 +371,18 @@
   min-width: 38px; text-align: center; user-select: none;
 }
 
+.ann-project-select {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  outline: none;
+  max-width: 160px;
+}
+.ann-project-select:focus { border-color: var(--accent); }
+
 /* ── Spinner ── */
 .ann-spinner {
   width: 14px; height: 14px;

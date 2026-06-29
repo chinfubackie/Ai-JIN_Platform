@@ -27,6 +27,9 @@ export default function Annotator() {
   const [imgIdx, setImgIdx]       = useState(0)
   const [labeledSet, setLabeledSet] = useState(new Set())
 
+  const [projects, setProjects]   = useState([])
+  const [projectId, setProjectId] = useState('')
+
   const [classes, setClasses]         = useState([])
   const [activeClass, setActiveClass] = useState(0)
   const [newClassName, setNewClassName] = useState('')
@@ -104,6 +107,11 @@ export default function Annotator() {
     return () => { document.body.style.overflow = '' }
   }, [])
 
+  /* ── load projects ── */
+  useEffect(() => {
+    api.projects().then(data => setProjects(Array.isArray(data) ? data : [])).catch(() => {})
+  }, [])
+
   /* ── persist: save folder index + classes on change ── */
   useEffect(() => {
     if (folder) localStorage.setItem('ann_last_folder', folder)
@@ -118,14 +126,37 @@ export default function Annotator() {
       localStorage.setItem(`ann_classes_${folder}`, JSON.stringify(classes))
   }, [folder, classes])
 
-  /* ── restore classes when folder loaded ── */
+  useEffect(() => {
+    if (folder) localStorage.setItem(`ann_project_${folder}`, projectId)
+  }, [folder, projectId])
+
+  /* ── restore state when folder loaded ── */
   useEffect(() => {
     if (!folder) return
+    // Restore saved classes
     const savedClasses = localStorage.getItem(`ann_classes_${folder}`)
     if (savedClasses) {
       try { setClasses(JSON.parse(savedClasses)) } catch (_) {}
     }
+    // Restore saved project
+    const savedProject = localStorage.getItem(`ann_project_${folder}`)
+    if (savedProject !== null) setProjectId(savedProject)
   }, [folder])
+
+  /* ── load classes from DB when project changes ── */
+  useEffect(() => {
+    if (!projectId) return
+    api.projectClasses(parseInt(projectId)).then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        const names = data.map(c => c.name)
+        setClasses(prev => {
+          const merged = [...prev]
+          names.forEach(n => { if (!merged.includes(n)) merged.push(n) })
+          return merged
+        })
+      }
+    }).catch(() => {})
+  }, [projectId])
 
   /* ── keyboard ── */
   useEffect(() => {
@@ -575,7 +606,9 @@ export default function Annotator() {
     if (!currentImage) return
     setLoading(true)
     try {
-      await api.saveLabelExt({ image_path: currentImage, boxes, polygons, classes })
+      const payload = { image_path: currentImage, boxes, polygons, classes }
+      if (projectId) payload.project_id = parseInt(projectId)
+      await api.saveLabelExt(payload)
       setLabeledSet(s => new Set([...s, currentImage]))
       showToast('บันทึกสำเร็จ ✓')
     } catch (err) {
@@ -676,6 +709,19 @@ export default function Annotator() {
           )}
         </div>
         <div className="ann-topbar-right">
+          {projects.length > 0 && (
+            <select
+              className="ann-project-select"
+              value={projectId}
+              onChange={e => setProjectId(e.target.value)}
+              title="เลือกโปรเจกต์เพื่อบันทึก annotation ลง DB"
+            >
+              <option value="">-- ไม่ระบุโปรเจกต์ --</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
           <button className="ann-tool-btn" onClick={autoLabel} disabled={!currentImage || autoLoading} title="Auto-label ด้วย YOLO">
             {autoLoading ? <><span className="ann-spinner-inline" /> Auto...</> : <><Zap size={14} /> Auto-label</>}
           </button>

@@ -49,6 +49,9 @@ export default function Training() {
     imgsz: 640,
   })
 
+  const [projects, setProjects] = useState([])
+  const [projectId, setProjectId] = useState('')
+
   // Tracking params
   const [trackCfg, setTrackCfg] = useState({
     tracker: 'bytetrack',
@@ -77,10 +80,11 @@ export default function Training() {
   const intervalRef = useRef(null)
   const logRef = useRef(null)
 
-  // Fetch initial status + models
+  // Fetch initial status + models + projects
   useEffect(() => {
     api.trainStatus().then(setStatus).catch(() => {})
-    // Load from DB registry first, fall back to file scan
+    api.projects().then(data => setProjects(Array.isArray(data) ? data : [])).catch(() => {})
+    // Load from DB runs first, fall back to file scan
     api.runs().then(dbRuns => {
       if (dbRuns?.length) setModels(dbRuns)
       else api.models().then(d => setModels(d?.models || d || [])).catch(() => {})
@@ -145,7 +149,9 @@ export default function Training() {
     setStarting(true)
     setLossHistory([])
     try {
-      await api.trainStart(config)
+      const payload = { ...config }
+      if (projectId) payload.project_id = parseInt(projectId)
+      await api.trainStart(payload)
       const s = await api.trainStatus()
       setStatus(s)
       startPolling()
@@ -330,6 +336,21 @@ export default function Training() {
         <div className="card">
           <div className="card-title"><Brain size={16} /> ตั้งค่าการเทรน</div>
           <div className="config-form">
+            {projects.length > 0 && (
+              <div className="form-group">
+                <label>โปรเจกต์</label>
+                <select
+                  value={projectId}
+                  onChange={e => setProjectId(e.target.value)}
+                  disabled={isTraining}
+                >
+                  <option value="">-- ไม่ระบุ --</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="form-group">
               <label>โมเดลพื้นฐาน</label>
               <select
@@ -548,39 +569,54 @@ export default function Training() {
                 </tr>
               </thead>
               <tbody>
-                {models.map(m => (
-                  <tr key={m.run || m.name || m.best_pt}>
-                    <td style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{m.run || m.name}</td>
-                    <td>{m.best_size_mb ? m.best_size_mb + ' MB' : formatBytes(m.size)}</td>
-                    <td>{m.epochs ? m.epochs + ' epochs' : formatDate(m.modified)}</td>
-                    <td>
-                      {m.mAP50 != null
-                        ? (m.mAP50 * 100).toFixed(1) + '%'
-                        : m.metrics?.mAP50 != null
-                        ? (m.metrics.mAP50 * 100).toFixed(1) + '%'
-                        : '-'}
-                    </td>
-                    <td>{m.mAP50_95 != null ? (m.mAP50_95 * 100).toFixed(1) + '%' : '-'}</td>
-                    <td>
-                      <div className="export-actions">
-                        {EXPORT_FORMATS.map(fmt => {
-                          const modelId = m.best_pt || m.name || m.run
-                          const key = `${modelId}:${fmt}`
-                          return (
-                            <button
-                              key={fmt}
-                              className="btn btn-outline"
-                              onClick={() => handleExport(modelId, fmt)}
-                              disabled={exporting === key}
-                            >
-                              {exporting === key ? '...' : fmt.toUpperCase()}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {models.map(m => {
+                  // Normalize: DB run vs file-scan shape
+                  const label   = m.run_name || m.run || m.name || '-'
+                  const modelId = m.path || m.best_pt || m.run_name || m.name
+                  const size    = m.size_bytes
+                    ? formatBytes(m.size_bytes)
+                    : m.best_size_mb ? m.best_size_mb + ' MB' : formatBytes(m.size)
+                  const epochs  = m.epochs ? m.epochs + ' ep' : ''
+                  const date    = m.created_at || m.started_at || m.modified
+                  const map50   = m.map50 ?? m.mAP50 ?? m.metrics?.mAP50
+                  const map5095 = m.map50_95 ?? m.mAP50_95 ?? m.metrics?.mAP50_95
+                  const status  = m.status
+                  return (
+                    <tr key={m.id || m.run || m.best_pt}>
+                      <td style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                        {label}
+                        {status && status !== 'completed' && (
+                          <span className={`badge badge-${status === 'training' ? 'yellow' : status === 'failed' ? 'red' : ''}`}
+                            style={{ marginLeft: 6, fontSize: 10 }}>
+                            {status}
+                          </span>
+                        )}
+                      </td>
+                      <td>{size}</td>
+                      <td>{epochs || formatDate(date)}</td>
+                      <td style={{ color: map50 != null ? 'var(--green)' : 'var(--text-muted)' }}>
+                        {map50 != null ? (map50 * 100).toFixed(1) + '%' : '-'}
+                      </td>
+                      <td>{map5095 != null ? (map5095 * 100).toFixed(1) + '%' : '-'}</td>
+                      <td>
+                        {modelId ? (
+                          <div className="export-actions">
+                            {EXPORT_FORMATS.map(fmt => {
+                              const key = `${modelId}:${fmt}`
+                              return (
+                                <button key={fmt} className="btn btn-outline"
+                                  onClick={() => handleExport(modelId, fmt)}
+                                  disabled={exporting === key}>
+                                  {exporting === key ? '...' : fmt.toUpperCase()}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        ) : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>-</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
