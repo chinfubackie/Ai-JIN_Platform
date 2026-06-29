@@ -3,8 +3,9 @@ import { api } from '../api/client'
 import {
   ChevronLeft, ChevronRight, Undo2, Redo2, Trash2, XCircle,
   ZoomIn, ZoomOut, Save, Sparkles, Plus, MousePointer2,
-  Square, Pentagon, Wand2, Cpu, Zap, ArrowRight, CheckCircle2,
-  Circle, Box,
+  Square, Pentagon, Wand2, Zap, ArrowRight, CheckCircle2,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
+  Layers, Tag,
 } from 'lucide-react'
 import LMAssistant from '../components/LMAssistant'
 import './Annotator.css'
@@ -54,9 +55,11 @@ export default function Annotator() {
   const [lmVisible, setLmVisible] = useState(false)
 
   /* ── UI ── */
-  const [zoom, setZoom]     = useState(1)
-  const [toast, setToast]   = useState(null)
+  const [zoom, setZoom]       = useState(1)
+  const [toast, setToast]     = useState(null)
   const [loading, setLoading] = useState(false)
+  const [leftOpen, setLeftOpen]   = useState(true)
+  const [rightOpen, setRightOpen] = useState(true)
 
   /* ── refs ── */
   const canvasRef  = useRef(null)
@@ -640,60 +643,71 @@ export default function Annotator() {
         </div>
       </div>
 
-      <div className="annotator-layout">
+      <div className="annotator-layout"
+        style={{ gridTemplateColumns: `${leftOpen ? '220px' : '32px'} 1fr ${rightOpen ? '200px' : '32px'}` }}>
         {/* ── Left: class panel ── */}
-        <div className="ann-sidebar">
-          <div className="ann-sidebar-section">
-            <div className="ann-sidebar-title">Classes ({classes.length})</div>
-            <div className="ann-class-list">
-              {!classes.length && (
-                <div style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: 12 }}>
-                  พิมพ์ชื่อคลาสด้านล่าง
-                </div>
-              )}
-              {classes.map((cls, i) => (
-                <div key={i}
-                  className={`ann-class-item${activeClass === i ? ' active' : ''}`}
-                  onClick={() => { setActiveClass(i); if (selected) changeSelectedClass(i) }}>
-                  <div className="ann-class-swatch" style={{ background: color(i) }} />
-                  <span className="ann-class-name">{cls}</span>
-                  <span className="ann-class-count">
-                    {boxes.filter(b => b[0] === i).length + polygons.filter(p => p.class_id === i).length}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="ann-add-class">
-              <input placeholder="ชื่อคลาสใหม่..." value={newClassName}
-                onChange={e => setNewClassName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addClass()} />
-              <button className="ann-add-btn" onClick={addClass}><Plus size={14} /></button>
-            </div>
+        <div className={`ann-sidebar${leftOpen ? '' : ' collapsed'}`}>
+          <div className="ann-panel-header">
+            <button className="ann-panel-toggle" onClick={() => setLeftOpen(v => !v)}
+              title={leftOpen ? 'ซ่อน Classes' : 'แสดง Classes'}>
+              {leftOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+            </button>
+            {leftOpen && <span className="ann-panel-title"><Tag size={12} /> Classes</span>}
           </div>
 
-          {/* SAM model selector */}
-          <div className="ann-sidebar-section" style={{ borderTop: '1px solid var(--border)' }}>
-            <div className="ann-sidebar-title">SAM Model</div>
-            <select value={samModel} onChange={e => setSamModel(e.target.value)} className="ann-sam-select">
-              <option value="sam2_b.pt">SAM2 Base</option>
-              <option value="sam2_t.pt">SAM2 Tiny</option>
-              <option value="sam2_l.pt">SAM2 Large</option>
-              <option value="sam_b.pt">SAM v1 Base</option>
-              <option value="sam_l.pt">SAM v1 Large</option>
-            </select>
-          </div>
-
-          {/* SAM preview confirm */}
-          {samPreview && (
-            <div className="ann-sam-preview">
-              <div className="ann-sam-preview-title">SAM Preview</div>
-              <div className="ann-sam-preview-info">{samPreview.length} จุด</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="ann-sam-apply" onClick={applySamPreview}>ใช้งาน</button>
-                <button className="ann-sam-discard" onClick={() => setSamPreview(null)}>ทิ้ง</button>
+          {leftOpen && (<>
+            <div className="ann-sidebar-section">
+              <div className="ann-sidebar-title">Classes ({classes.length})</div>
+              <div className="ann-class-list">
+                {!classes.length && (
+                  <div style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: 12 }}>
+                    พิมพ์ชื่อคลาสด้านล่าง
+                  </div>
+                )}
+                {classes.map((cls, i) => (
+                  <div key={i}
+                    className={`ann-class-item${activeClass === i ? ' active' : ''}`}
+                    onClick={() => { setActiveClass(i); if (selected) changeSelectedClass(i) }}>
+                    <div className="ann-class-swatch" style={{ background: color(i) }} />
+                    <span className="ann-class-name">{cls}</span>
+                    <span className="ann-class-count">
+                      {boxes.filter(b => b[0] === i).length + polygons.filter(p => p.class_id === i).length}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="ann-add-class">
+                <input placeholder="ชื่อคลาสใหม่..." value={newClassName}
+                  onChange={e => setNewClassName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addClass()} />
+                <button className="ann-add-btn" onClick={addClass}><Plus size={14} /></button>
               </div>
             </div>
-          )}
+
+            {/* SAM model selector */}
+            <div className="ann-sidebar-section" style={{ borderTop: '1px solid var(--border)' }}>
+              <div className="ann-sidebar-title">SAM Model</div>
+              <select value={samModel} onChange={e => setSamModel(e.target.value)} className="ann-sam-select">
+                <option value="sam2_b.pt">SAM2 Base</option>
+                <option value="sam2_t.pt">SAM2 Tiny</option>
+                <option value="sam2_l.pt">SAM2 Large</option>
+                <option value="sam_b.pt">SAM v1 Base</option>
+                <option value="sam_l.pt">SAM v1 Large</option>
+              </select>
+            </div>
+
+            {/* SAM preview confirm */}
+            {samPreview && (
+              <div className="ann-sam-preview">
+                <div className="ann-sam-preview-title">SAM Preview</div>
+                <div className="ann-sam-preview-info">{samPreview.length} จุด</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="ann-sam-apply" onClick={applySamPreview}>ใช้งาน</button>
+                  <button className="ann-sam-discard" onClick={() => setSamPreview(null)}>ทิ้ง</button>
+                </div>
+              </div>
+            )}
+          </>)}
         </div>
 
         {/* ── Center: canvas ── */}
@@ -751,34 +765,40 @@ export default function Annotator() {
         </div>
 
         {/* ── Right: annotation list ── */}
-        <div className="ann-ann-panel">
-          <div className="ann-sidebar-title" style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-            Annotations ({totalAnn})
+        <div className={`ann-ann-panel${rightOpen ? '' : ' collapsed'}`}>
+          <div className="ann-panel-header" style={{ justifyContent: rightOpen ? 'space-between' : 'center' }}>
+            {rightOpen && <span className="ann-panel-title"><Layers size={12} /> Annotations ({totalAnn})</span>}
+            <button className="ann-panel-toggle" onClick={() => setRightOpen(v => !v)}
+              title={rightOpen ? 'ซ่อน Annotations' : 'แสดง Annotations'}>
+              {rightOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+            </button>
           </div>
-          <div className="ann-ann-list">
-            {!totalAnn && (
-              <div style={{ padding: '20px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-                ยังไม่มี annotation<br />วาด box หรือ polygon
-              </div>
-            )}
-            {annItems.map(({ type, idx, cid }, li) => {
-              const isSel = selected?.type === type && selected.idx === idx
-              const cls = classes[cid] || `class_${cid}`
-              return (
-                <div key={`${type}-${idx}`}
-                  className={`ann-ann-item${isSel ? ' active' : ''}`}
-                  onClick={() => setSelected({ type, idx })}>
-                  <div className="ann-ann-swatch" style={{ background: color(cid) }} />
-                  <span className="ann-ann-icon">{type === 'box' ? '☐' : '⬡'}</span>
-                  <span className="ann-ann-name">{cls}</span>
-                  <span className="ann-ann-type">{type === 'box' ? 'Box' : 'Poly'}</span>
-                  <button className="ann-ann-del" onClick={e => { e.stopPropagation(); deleteAnnotation(type, idx) }}>
-                    <Trash2 size={11} />
-                  </button>
+          {rightOpen && (
+            <div className="ann-ann-list">
+              {!totalAnn && (
+                <div style={{ padding: '20px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+                  ยังไม่มี annotation<br />วาด box หรือ polygon
                 </div>
-              )
-            })}
-          </div>
+              )}
+              {annItems.map(({ type, idx, cid }) => {
+                const isSel = selected?.type === type && selected.idx === idx
+                const cls = classes[cid] || `class_${cid}`
+                return (
+                  <div key={`${type}-${idx}`}
+                    className={`ann-ann-item${isSel ? ' active' : ''}`}
+                    onClick={() => setSelected({ type, idx })}>
+                    <div className="ann-ann-swatch" style={{ background: color(cid) }} />
+                    <span className="ann-ann-icon">{type === 'box' ? '☐' : '⬡'}</span>
+                    <span className="ann-ann-name">{cls}</span>
+                    <span className="ann-ann-type">{type === 'box' ? 'Box' : 'Poly'}</span>
+                    <button className="ann-ann-del" onClick={e => { e.stopPropagation(); deleteAnnotation(type, idx) }}>
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* ── LM panel ── */}
