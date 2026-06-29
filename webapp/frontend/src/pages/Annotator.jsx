@@ -103,9 +103,16 @@ export default function Annotator() {
       if (e.target.tagName === 'INPUT') return
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo() }
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save() }
       if (e.key === 'Escape') { setPolyDraft([]); setSamPreview(null) }
       if (e.key === 'Enter' && tool === TOOL.POLYGON && polyDraft.length >= 3) closePolygon()
       if ((e.key === 'Delete' || e.key === 'Backspace') && selected) deleteSelected()
+      if (!e.ctrlKey && !e.metaKey) {
+        if (e.key === 'v' || e.key === 'V') setTool(TOOL.SELECT)
+        if (e.key === 'b' || e.key === 'B') setTool(TOOL.BOX)
+        if (e.key === 'p' || e.key === 'P') { setTool(TOOL.POLYGON); setPolyDraft([]) }
+        if (e.key === 's' || e.key === 'S') setTool(TOOL.SAM)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -246,6 +253,22 @@ export default function Annotator() {
         ctx.strokeRect(gx, gy, gw, gh)
       })
       ctx.setLineDash([])
+    }
+
+    // Box being drawn (drag preview)
+    if (tool === TOOL.BOX && boxDrawRef.current && hoverPt) {
+      const { sx, sy } = boxDrawRef.current
+      const [ex, ey] = hoverPt
+      const c = color(activeClass)
+      ctx.save()
+      ctx.setLineDash([6, 3])
+      ctx.strokeStyle = c; ctx.lineWidth = 2
+      ctx.fillStyle = c + '20'
+      const bx = Math.min(sx, ex), by = Math.min(sy, ey)
+      const bw = Math.abs(ex - sx), bh = Math.abs(ey - sy)
+      ctx.fillRect(bx, by, bw, bh)
+      ctx.strokeRect(bx, by, bw, bh)
+      ctx.restore()
     }
 
     // Polygon in progress
