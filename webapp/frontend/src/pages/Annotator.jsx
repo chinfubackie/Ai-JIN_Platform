@@ -98,6 +98,12 @@ export default function Annotator() {
     })
   }
 
+  /* ── lock page scroll while annotator is mounted ── */
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   /* ── keyboard ── */
   useEffect(() => {
     function onKey(e) {
@@ -119,6 +125,18 @@ export default function Annotator() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  })
+
+  /* ── wheel-to-zoom (passive:false to allow preventDefault) ── */
+  useEffect(() => {
+    const el = canvasRef.current
+    if (!el) return
+    const onWheel = (e) => {
+      e.preventDefault()
+      setZoom(z => Math.max(0.25, Math.min(5, z + (e.deltaY < 0 ? 0.1 : -0.1))))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
   })
 
   /* ── load folders ── */
