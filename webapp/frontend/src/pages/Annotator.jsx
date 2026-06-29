@@ -104,6 +104,29 @@ export default function Annotator() {
     return () => { document.body.style.overflow = '' }
   }, [])
 
+  /* ── persist: save folder index + classes on change ── */
+  useEffect(() => {
+    if (folder) localStorage.setItem('ann_last_folder', folder)
+  }, [folder])
+
+  useEffect(() => {
+    if (folder) localStorage.setItem(`ann_idx_${folder}`, imgIdx)
+  }, [folder, imgIdx])
+
+  useEffect(() => {
+    if (folder && classes.length > 0)
+      localStorage.setItem(`ann_classes_${folder}`, JSON.stringify(classes))
+  }, [folder, classes])
+
+  /* ── restore classes when folder loaded ── */
+  useEffect(() => {
+    if (!folder) return
+    const savedClasses = localStorage.getItem(`ann_classes_${folder}`)
+    if (savedClasses) {
+      try { setClasses(JSON.parse(savedClasses)) } catch (_) {}
+    }
+  }, [folder])
+
   /* ── keyboard ── */
   useEffect(() => {
     function onKey(e) {
@@ -144,15 +167,24 @@ export default function Annotator() {
     api.folders().then(d => {
       const list = (d?.folders || []).map(f => (typeof f === 'string' ? f : f.path))
       setFolders(list)
-      if (list.length) setFolder(list[0])
+      // Use saved folder if it exists in the list, otherwise default to first
+      const saved = localStorage.getItem('ann_last_folder')
+      const pick = saved && list.includes(saved) ? saved : list[0]
+      if (pick) setFolder(pick)
     }).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (!folder) return
     api.images(folder, 1, 9999).then(r => {
-      setImageList((r.images || []).map(i => (typeof i === 'string' ? i : i.path)))
-      setImgIdx(0)
+      const imgs = (r.images || []).map(i => (typeof i === 'string' ? i : i.path))
+      setImageList(imgs)
+      // Restore saved index (clamped to list length)
+      const savedIdx = localStorage.getItem(`ann_idx_${folder}`)
+      const startIdx = savedIdx !== null
+        ? Math.min(Math.max(0, parseInt(savedIdx, 10)), Math.max(0, imgs.length - 1))
+        : 0
+      setImgIdx(startIdx)
       setLabeledSet(new Set())
     }).catch(() => setImageList([]))
   }, [folder])
