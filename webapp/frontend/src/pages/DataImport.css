@@ -1,3 +1,23 @@
+/* Project selector row */
+.di-project-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.di-project-select {
+  padding: 6px 10px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+.di-project-select:focus { border-color: var(--accent); }
+
 /* Upload Section */
 .di-upload-grid {
   display: grid;

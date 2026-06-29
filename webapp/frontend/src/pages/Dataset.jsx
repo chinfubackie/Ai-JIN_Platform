@@ -23,11 +23,14 @@ const BOX_COLORS = [
 export default function Dataset() {
   const [folders, setFolders] = useState([])
   const [activeFolder, setActiveFolder] = useState(null)
-  const [images, setImages] = useState([])
+  const [images, setImages] = useState([])   // [{path, labeled, annotation_count}]
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [foldersLoading, setFoldersLoading] = useState(true)
+  const [projects, setProjects] = useState([])
+  const [activeProject, setActiveProject] = useState('')
+  const [syncing, setSyncing] = useState(false)
 
   // Modal state
   const [modalImage, setModalImage] = useState(null)
@@ -36,36 +39,50 @@ export default function Dataset() {
   const canvasRef = useRef(null)
   const imgRef = useRef(null)
 
-  // Load folders on mount
+  // Load folders + projects on mount
   useEffect(() => {
     setFoldersLoading(true)
-    api
-      .folders()
+    api.folders()
       .then((data) => {
         const list = (data?.folders || data || []).map(f => typeof f === 'string' ? f : f.path)
         setFolders(list)
-        if (list.length > 0) {
-          setActiveFolder(list[0])
-        }
+        if (list.length > 0) setActiveFolder(list[0])
       })
       .catch(console.error)
       .finally(() => setFoldersLoading(false))
+    api.projects().then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
 
-  // Load images when folder or page changes
+  // Load images when folder or page changes — keep as objects {path,labeled,annotation_count}
   useEffect(() => {
     if (!activeFolder) return
     setLoading(true)
     api
       .images(activeFolder, page, PER_PAGE)
       .then((res) => {
-        const imgs = (res.images || []).map(i => typeof i === 'string' ? i : i.path)
+        const imgs = (res.images || []).map(i =>
+          typeof i === 'string' ? { path: i, labeled: 0, annotation_count: 0 } : i
+        )
         setImages(imgs)
         setTotal(res.total || imgs.length)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [activeFolder, page])
+
+  const handleSync = async () => {
+    if (!activeProject) return
+    setSyncing(true)
+    try {
+      const r = await api.projectSync(parseInt(activeProject))
+      // Reload images after sync
+      const res = await api.images(activeFolder, page, PER_PAGE)
+      setImages((res.images || []).map(i =>
+        typeof i === 'string' ? { path: i, labeled: 0, annotation_count: 0 } : i
+      ))
+      setTotal(res.total || 0)
+    } catch { /* silent */ } finally { setSyncing(false) }
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
@@ -76,6 +93,9 @@ export default function Dataset() {
     setImages([])
     setTotal(0)
   }
+
+  // openModal still receives the path string
+  const getPath = (img) => (typeof img === 'string' ? img : img.path)
 
   // -- Modal --
   const openModal = (imgPath) => {
@@ -220,6 +240,34 @@ export default function Dataset() {
 
         {/* ---- Image grid area ---- */}
         <div className="dataset-main">
+          {/* Project selector bar */}
+          {projects.length > 0 && (
+            <div className="dataset-project-bar">
+              <Tag size={14} />
+              <span>โปรเจกต์:</span>
+              <select
+                value={activeProject}
+                onChange={e => setActiveProject(e.target.value)}
+                className="dataset-project-select"
+              >
+                <option value="">-- ไม่ระบุ --</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              {activeProject && (
+                <button
+                  className="btn btn-outline"
+                  onClick={handleSync}
+                  disabled={syncing}
+                  style={{ padding: '3px 10px', fontSize: 12 }}
+                >
+                  {syncing ? 'Syncing...' : 'Sync → DB'}
+                </button>
+              )}
+            </div>
+          )}
+
           {activeFolder ? (
             <>
               <div className="dataset-toolbar">
@@ -246,8 +294,11 @@ export default function Dataset() {
                 <>
                   <div className="dataset-grid-wrap">
                     <div className="dataset-grid">
-                      {images.map((imgPath) => {
+                      {images.map((img) => {
+                        const imgPath = getPath(img)
                         const name = imgPath.split('/').pop()
+                        const labeled = img.labeled === 1 || img.labeled === true
+                        const annCount = img.annotation_count || 0
                         return (
                           <div
                             key={imgPath}
@@ -255,12 +306,13 @@ export default function Dataset() {
                             onClick={() => openModal(imgPath)}
                             title={name}
                           >
-                            <img
-                              src={api.image(imgPath)}
-                              alt={name}
-                              loading="lazy"
-                            />
-                            <div className="dataset-thumb-name">{name}</div>
+                            <img src={api.image(imgPath)} alt={name} loading="lazy" />
+                            <div className="dataset-thumb-footer">
+                              <span className="dataset-thumb-name">{name}</span>
+                              <span className={`ds-labeled-badge ${labeled ? 'labeled' : 'unlabeled'}`}>
+                                {labeled ? `✓ ${annCount}` : 'unlabeled'}
+                              </span>
+                            </div>
                           </div>
                         )
                       })}

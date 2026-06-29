@@ -18,6 +18,8 @@ export default function DataImport() {
   const [progress, setProgress] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef(null)
+  const [projects, setProjects] = useState([])
+  const [selectedProject, setSelectedProject] = useState('')
 
   // Browse state
   const [folders, setFolders] = useState([])
@@ -70,6 +72,7 @@ export default function DataImport() {
     loadClasses()
     loadSplitInfo()
     loadFolders()
+    api.projects().then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {})
   }, [loadClasses, loadSplitInfo, loadFolders])
 
   useEffect(() => {
@@ -158,6 +161,14 @@ export default function DataImport() {
       setFiles([])
       if (fileInputRef.current) fileInputRef.current.value = ''
       refreshAll()
+
+      // Auto-sync to project DB
+      if (selectedProject) {
+        try {
+          const r = await api.projectSync(parseInt(selectedProject))
+          showToast(`Sync โปรเจกต์สำเร็จ: ${r.synced ?? 0} ภาพ`)
+        } catch { /* non-fatal */ }
+      }
     } catch (err) {
       showToast(`อัปโหลดล้มเหลว: ${err.message}`, 'error')
     } finally {
@@ -260,6 +271,24 @@ export default function DataImport() {
       {/* ---- Upload Section ---- */}
       <div className="card di-section">
         <div className="card-title">อัปโหลดไฟล์</div>
+
+        {/* Project selector */}
+        {projects.length > 0 && (
+          <div className="di-project-row">
+            <label>บันทึกใต้โปรเจกต์:</label>
+            <select
+              value={selectedProject}
+              onChange={e => setSelectedProject(e.target.value)}
+              className="di-project-select"
+            >
+              <option value="">-- ไม่ระบุโปรเจกต์ --</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="di-upload-grid">
           {/* Drop zone */}
           <div>
