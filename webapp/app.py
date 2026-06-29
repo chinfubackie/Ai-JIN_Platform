@@ -755,23 +755,25 @@ def api_folders_create():
 # ── API: Data Import ────────────────────────────────────────────────
 @app.route("/api/import/upload", methods=["POST"])
 def api_import_upload():
-    """Upload images to a dataset folder"""
+    """Upload images and YOLO label files to a dataset folder."""
     target_class = request.form.get("class_name", "uncategorized")
     split = request.form.get("split", "train")
     dest = _safe_path(DATASET, f"auto_improve/images/{split}/{target_class}")
+    label_dest = _safe_path(DATASET, f"auto_improve/labels/{split}/{target_class}")
     dest.mkdir(parents=True, exist_ok=True)
-    files = request.files.getlist("images")
+    label_dest.mkdir(parents=True, exist_ok=True)
+    files = request.files.getlist("images") or request.files.getlist("files")
     saved = []
     skipped = []
     for f in files:
         if not f.filename:
             continue
         ext = Path(f.filename).suffix.lower()
-        if ext not in IMG_EXT:
+        if ext not in IMG_EXT and ext != ".txt":
             skipped.append(f.filename)
             continue
         safe_name = Path(f.filename).name.replace(" ", "_")
-        out = dest / safe_name
+        out = (label_dest if ext == ".txt" else dest) / safe_name
         if out.exists():
             skipped.append(f.filename)
             continue
@@ -840,13 +842,16 @@ def api_import_split_info():
 def api_import_delete():
     """Delete images from dataset"""
     data = request.json or {}
-    paths = data.get("paths", [])
+    paths = data.get("paths") or data.get("files") or []
     deleted = 0
     for p in paths:
         full = _safe_path(DATASET, p)
         if full.exists() and full.suffix.lower() in IMG_EXT:
-            label_dir = full.parent.parent / "labels"
-            label_file = label_dir / f"{full.stem}.txt"
+            try:
+                rel = full.relative_to(DATASET / "auto_improve" / "images")
+                label_file = DATASET / "auto_improve" / "labels" / rel.with_suffix(".txt")
+            except ValueError:
+                label_file = full.parent.parent / "labels" / f"{full.stem}.txt"
             full.unlink()
             if label_file.exists():
                 label_file.unlink()
@@ -859,20 +864,25 @@ def api_import_move():
     """Move images between train/val splits"""
     import shutil
     data = request.json or {}
-    paths = data.get("paths", [])
+    paths = data.get("paths") or data.get("files") or []
     target_split = data.get("target_split", "val")
     moved = 0
     for p in paths:
         full = _safe_path(DATASET, p)
         if not full.exists():
             continue
-        class_name = full.parent.name
+        try:
+            rel = full.relative_to(DATASET / "auto_improve" / "images")
+            parts = rel.parts
+            source_split = parts[0] if len(parts) >= 3 else full.parent.parent.name
+            class_name = parts[1] if len(parts) >= 3 else full.parent.name
+            label_src = DATASET / "auto_improve" / "labels" / source_split / class_name / f"{full.stem}.txt"
+        except ValueError:
+            class_name = full.parent.name
+            label_src = full.parent.parent / "labels" / f"{full.stem}.txt"
         dest_dir = DATASET / "auto_improve" / "images" / target_split / class_name
         dest_dir.mkdir(parents=True, exist_ok=True)
         shutil.move(str(full), str(dest_dir / full.name))
-        label_src = full.parent.parent.parent / "labels" / full.parent.parent.name / class_name / f"{full.stem}.txt"
-        if not label_src.exists():
-            label_src = full.parent.parent / "labels" / f"{full.stem}.txt"
         if label_src.exists():
             label_dest = DATASET / "auto_improve" / "labels" / target_split / class_name
             label_dest.mkdir(parents=True, exist_ok=True)

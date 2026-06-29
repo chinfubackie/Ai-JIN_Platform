@@ -136,7 +136,7 @@ export default function Annotator() {
     // Restore saved classes
     const savedClasses = localStorage.getItem(`ann_classes_${folder}`)
     if (savedClasses) {
-      try { setClasses(JSON.parse(savedClasses)) } catch (_) {}
+      try { setClasses(JSON.parse(savedClasses)) } catch {}
     }
     // Restore saved project
     const savedProject = localStorage.getItem(`ann_project_${folder}`)
@@ -264,7 +264,7 @@ export default function Annotator() {
   }, [currentImage])
 
   /* ── render rect ── */
-  function computeRect() {
+  const computeRect = useCallback(() => {
     const canvas = canvasRef.current
     const wrap = wrapRef.current
     if (!canvas || !wrap || !imgRef.current) return null
@@ -276,7 +276,7 @@ export default function Annotator() {
     const ox = (cw - rw) / 2, oy = (ch - rh) / 2
     renderRect.current = { w: rw, h: rh, ox, oy }
     return { rw, rh, ox, oy, cw, ch }
-  }
+  }, [zoom])
 
   /* ── draw ── */
   const draw = useCallback(() => {
@@ -321,7 +321,8 @@ export default function Annotator() {
       ctx.beginPath()
       samPreview.forEach(([nx, ny], i) => {
         const px = r.ox + nx * r.rw, py = r.oy + ny * r.rh
-        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
       })
       ctx.closePath(); ctx.fill(); ctx.stroke()
       ctx.restore()
@@ -357,14 +358,15 @@ export default function Annotator() {
         ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.stroke()
       })
     }
-  }, [boxes, polygons, selected, zoom, tool, polyDraft, hoverPt, activeClass, classes, samPreview])
+  }, [boxes, polygons, selected, tool, polyDraft, hoverPt, activeClass, classes, samPreview, computeRect])
 
   function drawPoly(ctx, pts, r, c, isSel) {
     if (!pts?.length) return
     ctx.beginPath()
     pts.forEach(([nx, ny], i) => {
       const px = r.ox + nx * r.rw, py = r.oy + ny * r.rh
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
     })
     ctx.closePath()
     ctx.fillStyle = c + (isSel ? '40' : '25'); ctx.fill()

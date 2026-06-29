@@ -74,7 +74,7 @@ export default function Dataset() {
     if (!activeProject) return
     setSyncing(true)
     try {
-      const r = await api.projectSync(parseInt(activeProject))
+      await api.projectSync(parseInt(activeProject))
       // Reload images after sync
       const res = await api.images(activeFolder, page, PER_PAGE)
       setImages((res.images || []).map(i =>
@@ -129,8 +129,6 @@ export default function Dataset() {
     const img = imgRef.current
     if (!canvas || !img || !labelData) return
 
-    const w = img.naturalWidth
-    const h = img.naturalHeight
     const dispW = img.clientWidth
     const dispH = img.clientHeight
 
@@ -140,16 +138,13 @@ export default function Dataset() {
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, dispW, dispH)
 
-    const lines = (labelData.content || '').trim().split('\n').filter(Boolean)
-    lines.forEach((line) => {
-      const parts = line.trim().split(/\s+/)
-      if (parts.length < 5) return
-
-      const classId = parseInt(parts[0], 10)
-      const cx = parseFloat(parts[1]) * dispW
-      const cy = parseFloat(parts[2]) * dispH
-      const bw = parseFloat(parts[3]) * dispW
-      const bh = parseFloat(parts[4]) * dispH
+    const labels = labelData.labels || []
+    labels.forEach((lb) => {
+      const classId = Number(lb.class_id ?? 0)
+      const cx = Number(lb.cx ?? 0) * dispW
+      const cy = Number(lb.cy ?? 0) * dispH
+      const bw = Number(lb.w ?? 0) * dispW
+      const bh = Number(lb.h ?? 0) * dispH
 
       const x = cx - bw / 2
       const y = cy - bh / 2
@@ -181,19 +176,16 @@ export default function Dataset() {
 
   // Count boxes in label
   const boxCount = labelData
-    ? (labelData.content || '').trim().split('\n').filter(Boolean).length
+    ? (labelData.labels || []).length
     : 0
 
   // Unique classes in this label
   const labelClasses = labelData
     ? [
         ...new Set(
-          (labelData.content || '')
-            .trim()
-            .split('\n')
-            .filter(Boolean)
-            .map((l) => {
-              const id = parseInt(l.trim().split(/\s+/)[0], 10)
+          (labelData.labels || [])
+            .map((lb) => {
+              const id = Number(lb.class_id ?? 0)
               return labelData.classes?.[id] ?? `class ${id}`
             })
         ),

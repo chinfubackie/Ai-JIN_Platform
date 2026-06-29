@@ -116,8 +116,6 @@ export default function Projects() {
     } catch { showToast('Sync ไม่สำเร็จ', 'error') }
   }
 
-  const selectedProject = projects.find(p => p.id === selected)
-
   return (
     <div className="proj-page">
       <Toast toast={toast} />

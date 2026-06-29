@@ -140,7 +140,7 @@ export default function DataImport() {
     setProgress(0)
 
     const formData = new FormData()
-    files.forEach(f => formData.append('files', f))
+    files.forEach(f => formData.append('images', f))
     formData.append('class_name', className.trim())
     formData.append('split', split)
 

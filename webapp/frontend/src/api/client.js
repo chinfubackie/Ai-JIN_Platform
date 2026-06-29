@@ -27,7 +27,7 @@ export const api = {
     fetchJSON('/models/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model_path: path }),
+      body: JSON.stringify({ source: path }),
     }),
   folders: () => fetchJSON('/folders'),
   createFolder: (class_name, split = 'train') =>
@@ -57,13 +57,13 @@ export const api = {
     fetchJSON('/import/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files }),
+      body: JSON.stringify({ paths: files }),
     }),
   importMove: (files, target) =>
     fetchJSON('/import/move', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files, target_split: target }),
+      body: JSON.stringify({ paths: files, target_split: target }),
     }),
   importGenerateYaml: () =>
     fetchJSON('/import/generate-yaml', { method: 'POST' }),

@@ -59,6 +59,7 @@ export default function Dashboard() {
   const totalClasses  = dbStats?.total_classes  ?? Object.keys(ds.classes || {}).length
   const labelRate     = dbStats?.label_rate     ?? 0
   const totalProjects = dbStats?.total_projects ?? projects.length
+  const totalExports  = stats.recent_exports?.length ?? 0
 
   const labeledImages = dbStats?.labeled_images ?? 0
 
