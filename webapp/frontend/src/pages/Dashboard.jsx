@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import {
   PieChart, Pie, Cell, ResponsiveContainer,
@@ -25,6 +26,7 @@ function timeAgo(date) {
 const HEALTH_COLORS = ['var(--green)', 'var(--yellow)', 'var(--red)']
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [dbStats, setDbStats] = useState(null)
   const [folders, setFolders] = useState([])
@@ -80,11 +82,11 @@ export default function Dashboard() {
   }))
 
   const quickStats = [
-    { label: 'โปรเจกต์', value: totalProjects, icon: FolderOpen, color: 'var(--accent)', sub: `${projects.length} active` },
-    { label: 'รูปภาพ', value: totalImages, icon: Image, color: 'var(--cyan)', sub: `${labeledImages} labeled` },
-    { label: 'Annotations', value: totalAnnotations, icon: Tag, color: 'var(--green)', sub: `${labelRate}% rate` },
-    { label: 'Classes', value: totalClasses, icon: Box, color: 'var(--yellow)', sub: 'ทั้งหมด' },
-    { label: 'โมเดล', value: totalModels, icon: Download, color: 'var(--red)', sub: `${dbStats?.deployed_models ?? 0} deployed` },
+    { label: 'โปรเจกต์', value: totalProjects, icon: FolderOpen, color: 'var(--accent)', sub: `${projects.length} active`, to: '/projects' },
+    { label: 'รูปภาพ', value: totalImages, icon: Image, color: 'var(--cyan)', sub: `${labeledImages} labeled`, to: '/dataset' },
+    { label: 'Annotations', value: totalAnnotations, icon: Tag, color: 'var(--green)', sub: `${labelRate}% rate`, to: '/annotator' },
+    { label: 'Classes', value: totalClasses, icon: Box, color: 'var(--yellow)', sub: 'ทั้งหมด', to: '/import' },
+    { label: 'โมเดล', value: totalModels, icon: Download, color: 'var(--red)', sub: `${dbStats?.deployed_models ?? 0} deployed`, to: '/models' },
   ]
 
   const displayFolders = folders.slice(0, 6)
@@ -173,14 +175,14 @@ export default function Dashboard() {
         {quickStats.map((s) => {
           const Icon = s.icon
           return (
-            <div className="dash-stat-card" key={s.label}>
+            <button className="dash-stat-card" key={s.label} onClick={() => navigate(s.to)}>
               <div className="dash-stat-icon" style={{ background: `${s.color}18` }}>
                 <Icon size={20} color={s.color} />
               </div>
               <div className="dash-stat-number">{s.value.toLocaleString()}</div>
               <div className="dash-stat-label">{s.label}</div>
               <div className="dash-stat-growth">{s.sub}</div>
-            </div>
+            </button>
           )
         })}
       </section>
@@ -189,7 +191,7 @@ export default function Dashboard() {
       <section className="dash-section">
         <div className="dash-section-header">
           <h2 className="dash-section-title">ชุดข้อมูลของฉัน</h2>
-          <button className="dash-view-all">ดูทั้งหมด</button>
+          <button className="dash-view-all" onClick={() => navigate('/dataset')}>ดูทั้งหมด</button>
         </div>
         <div className="dash-datasets-grid">
           {displayFolders.map((folder, idx) => {
@@ -198,7 +200,14 @@ export default function Dashboard() {
             const imgCount = folder.count || folder.image_count || 0
             const isPrivate = idx % 2 === 0
             return (
-              <div className="dash-dataset-card" key={path || idx}>
+              <div
+                className="dash-dataset-card"
+                key={path || idx}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate('/dataset')}
+                onKeyDown={(e) => { if (e.key === 'Enter') navigate('/dataset') }}
+              >
                 <div className="dash-dataset-thumb">
                   <div className="dash-dataset-thumb-placeholder">
                     <FolderOpen size={32} color="var(--text-muted)" />
@@ -206,7 +215,12 @@ export default function Dashboard() {
                   <span className={`dash-dataset-badge ${isPrivate ? 'private' : 'public'}`}>
                     {isPrivate ? 'Private' : 'Public'}
                   </span>
-                  <button className="dash-dataset-menu" aria-label="เมนู">
+                  <button
+                    className="dash-dataset-menu"
+                    aria-label="เปิดใน Annotator"
+                    title="เปิดใน Annotator"
+                    onClick={(e) => { e.stopPropagation(); navigate('/annotator') }}
+                  >
                     <MoreHorizontal size={16} />
                   </button>
                 </div>
@@ -220,10 +234,10 @@ export default function Dashboard() {
             )
           })}
           {displayFolders.length === 0 && (
-            <div className="dash-dataset-card dash-dataset-empty">
+            <button className="dash-dataset-card dash-dataset-empty" onClick={() => navigate('/import')}>
               <Plus size={32} color="var(--text-muted)" />
               <span>เพิ่มชุดข้อมูลแรก</span>
-            </div>
+            </button>
           )}
         </div>
       </section>
@@ -232,11 +246,11 @@ export default function Dashboard() {
       <section className="dash-section">
         <div className="dash-section-header">
           <h2 className="dash-section-title">โปรเจกต์ล่าสุด</h2>
-          <button className="dash-view-all">ดูทั้งหมด</button>
+          <button className="dash-view-all" onClick={() => navigate('/projects')}>ดูทั้งหมด</button>
         </div>
         <div className="dash-projects-row">
           {recentProjects.map((proj, i) => (
-            <div className="dash-project-card" key={i}>
+            <button className="dash-project-card" key={i} onClick={() => navigate('/projects')}>
               <div className="dash-project-icon" style={{ background: proj.color }}>
                 {proj.initial}
               </div>
@@ -256,12 +270,12 @@ export default function Dashboard() {
                   <Clock size={12} /> อัปเดต {proj.updated}
                 </div>
               </div>
-            </div>
+            </button>
           ))}
-          <div className="dash-project-card dash-project-new">
+          <button className="dash-project-card dash-project-new" onClick={() => navigate('/projects')}>
             <Plus size={28} color="var(--text-muted)" />
             <span>โปรเจกต์ใหม่</span>
-          </div>
+          </button>
         </div>
       </section>
 

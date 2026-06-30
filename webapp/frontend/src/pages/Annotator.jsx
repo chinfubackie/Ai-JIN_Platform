@@ -50,6 +50,8 @@ export default function Annotator() {
   const [samLoading, setSamLoading]   = useState(false)
   const [samModel, setSamModel]       = useState('sam2_b.pt')
   const [samPreview, setSamPreview]   = useState(null)
+  const [sam3ConceptText, setSam3ConceptText] = useState('')
+  const [sam3Status, setSam3Status] = useState(null)
 
   /* ── auto-label ── */
   const [autoLoading, setAutoLoading] = useState(false)
@@ -71,6 +73,7 @@ export default function Annotator() {
   const imgNat     = useRef({ w: 1, h: 1 })
   const renderRect = useRef({ w: 1, h: 1, ox: 0, oy: 0 })
   const boxDrawRef = useRef(null)
+  const drawRef    = useRef(null)
 
   /* ── helpers ── */
   function showToast(msg, type = 'success') {
@@ -231,6 +234,19 @@ export default function Annotator() {
     if (tool !== TOOL.SAM) setSamPreview(null)
   }, [tool])
 
+  useEffect(() => {
+    if (samModel !== 'sam3') return
+    let cancelled = false
+    api.sam3Status()
+      .then(status => { if (!cancelled) setSam3Status(status) })
+      .catch(err => {
+        if (!cancelled) {
+          setSam3Status({ available: false, model_exists: false, error: err.message })
+        }
+      })
+    return () => { cancelled = true }
+  }, [samModel])
+
   /* ── load image + labels ── */
   useEffect(() => {
     if (!currentImage) return
@@ -243,7 +259,7 @@ export default function Annotator() {
     img.onload = () => {
       imgRef.current = img
       imgNat.current = { w: img.naturalWidth, h: img.naturalHeight }
-      requestAnimationFrame(draw)
+      requestAnimationFrame(() => drawRef.current?.())
     }
     img.src = api.image(currentImage)
 
@@ -360,6 +376,10 @@ export default function Annotator() {
     }
   }, [boxes, polygons, selected, tool, polyDraft, hoverPt, activeClass, classes, samPreview, computeRect])
 
+  useEffect(() => {
+    drawRef.current = draw
+  }, [draw])
+
   function drawPoly(ctx, pts, r, c, isSel) {
     if (!pts?.length) return
     ctx.beginPath()
@@ -472,6 +492,10 @@ export default function Annotator() {
   /* ── SAM ── */
   async function handleSamClick(cx, cy) {
     if (!currentImage || !imgRef.current || samLoading) return
+    if (samModel === 'sam3') {
+      showToast('ใช้ Segment by Concept สำหรับ SAM 3', 'error')
+      return
+    }
     const [nx, ny] = normPos(cx, cy)
     if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return
     setSamLoading(true); setSamPreview(null)
@@ -502,6 +526,51 @@ export default function Annotator() {
     setPolygons(prev => [...prev, { class_id: cid, pts: samPreview }])
     setSamPreview(null)
     showToast('เพิ่ม SAM polygon สำเร็จ')
+  }
+
+  async function segmentByConcept() {
+    if (!currentImage || !imgRef.current || samLoading) return
+    const prompts = sam3ConceptText.split(',').map(s => s.trim()).filter(Boolean)
+    if (!prompts.length) {
+      showToast('ใส่ concept prompt ก่อน', 'error')
+      return
+    }
+    setSamLoading(true)
+    try {
+      const res = await api.sam3Predict({
+        image_path: currentImage,
+        text: prompts,
+        conf: 0.25,
+      })
+      if (res.error) {
+        showToast(`${res.error}${res.hint ? ` ${res.hint}` : ''}`, 'error')
+        return
+      }
+      if (!res.boxes?.length) {
+        showToast('SAM3 ไม่พบวัตถุตาม concept', 'error')
+        return
+      }
+
+      const iw = imgNat.current.w, ih = imgNat.current.h
+      pushHistory([...boxes], [...polygons])
+      const upd = [...classes]
+      const newBoxes = res.boxes.map((bbox, idx) => {
+        const name = res.labels?.[idx] || prompts[idx % prompts.length] || 'concept'
+        let cid = upd.indexOf(name)
+        if (cid < 0) { upd.push(name); cid = upd.length - 1 }
+        const [x1, y1, x2, y2] = bbox
+        const cx = (x1 + x2) / (2 * iw), cy = (y1 + y2) / (2 * ih)
+        const bw = (x2 - x1) / iw, bh = (y2 - y1) / ih
+        return [cid, cx, cy, bw, bh]
+      })
+      setClasses(upd)
+      setBoxes(prev => [...prev, ...newBoxes])
+      showToast(`SAM3: พบ ${newBoxes.length} วัตถุ`)
+    } catch (err) {
+      showToast('SAM3 ล้มเหลว: ' + err.message, 'error')
+    } finally {
+      setSamLoading(false)
+    }
   }
 
   /* ── Auto-label (YOLO) ── */
@@ -790,7 +859,36 @@ export default function Annotator() {
                 <option value="sam2_l.pt">SAM2 Large</option>
                 <option value="sam_b.pt">SAM v1 Base</option>
                 <option value="sam_l.pt">SAM v1 Large</option>
+                <option value="sam3">SAM 3 (Concept)</option>
               </select>
+              {samModel === 'sam3' && (
+                <div className="ann-sam3-panel">
+                  {sam3Status && (!sam3Status.available || !sam3Status.model_exists) && (
+                    <div className="ann-sam3-warning">
+                      {!sam3Status.model_exists
+                        ? 'sam3.pt not found'
+                        : 'SAM3 not available'}
+                    </div>
+                  )}
+                  <label className="ann-sam3-label" htmlFor="sam3-concepts">
+                    Concept prompts (comma-separated)
+                  </label>
+                  <input
+                    id="sam3-concepts"
+                    className="ann-sam3-input"
+                    value={sam3ConceptText}
+                    onChange={e => setSam3ConceptText(e.target.value)}
+                    placeholder="person, car, dog"
+                  />
+                  <button
+                    className="ann-sam3-button"
+                    onClick={segmentByConcept}
+                    disabled={!currentImage || samLoading}
+                  >
+                    {samLoading ? <><span className="ann-spinner-inline" /> SAM3...</> : <><Sparkles size={14} /> Segment by Concept</>}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* SAM preview confirm */}

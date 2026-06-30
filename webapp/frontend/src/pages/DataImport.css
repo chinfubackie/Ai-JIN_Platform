@@ -105,6 +105,14 @@
 .di-field select {
   width: 100%;
 }
+.di-static-field {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 8px 10px;
+}
 
 .di-upload-actions {
   display: flex;
@@ -337,6 +345,31 @@
 .di-yaml-section .di-yaml-msg {
   font-size: 13px;
   color: var(--green);
+}
+
+.di-ls-result {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-size: 13px;
+}
+.di-ls-summary {
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+.di-ls-skipped {
+  color: var(--yellow);
+  margin-top: 6px;
+}
+.di-ls-errors {
+  color: var(--red);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  max-height: 130px;
+  overflow-y: auto;
 }
 
 /* Add Folder */

@@ -114,6 +114,7 @@ body {
   gap: 8px;
   min-width: 180px;
   justify-content: flex-end;
+  position: relative;
 }
 .topbar-icon-btn {
   position: relative;
@@ -149,6 +150,63 @@ body {
   align-items: center;
   justify-content: center;
   line-height: 1;
+}
+.notifications-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 78px;
+  width: 300px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  padding: 10px;
+  z-index: 310;
+  animation: dropdown-in 0.15s ease;
+}
+.notifications-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 6px 8px;
+}
+.notification-item {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 9px 8px;
+  text-align: left;
+}
+.notification-item:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+.notification-item strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.notification-item small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.14);
+  flex-shrink: 0;
 }
 
 /* -- Avatar -- */
@@ -284,6 +342,8 @@ body {
   padding: 7px 10px;
   cursor: pointer;
   transition: border-color 0.2s ease;
+  width: 100%;
+  text-align: left;
 }
 .sidebar-search:hover {
   border-color: var(--text-muted);
@@ -292,16 +352,10 @@ body {
   color: var(--text-muted);
   flex-shrink: 0;
 }
-.sidebar-search input {
+.sidebar-search-text {
   flex: 1;
-  background: none;
-  border: none;
   color: var(--text-muted);
   font-size: 13px;
-  outline: none;
-  cursor: pointer;
-  padding: 0;
-  width: auto;
 }
 .search-kbd {
   font-size: 10px;
@@ -729,4 +783,17 @@ th {
 }
 .sidebar::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+.layout-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  padding: 10px 16px;
+  font-size: 13px;
+  z-index: 400;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }

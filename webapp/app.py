@@ -8,6 +8,9 @@ import json
 import time
 import base64
 import csv
+import shutil
+import urllib.parse
+import urllib.request
 from pathlib import Path
 import db as _db
 
@@ -24,6 +27,14 @@ MODEL_DIR = Path(os.getenv("MODEL_PATH", r"D:\Ai-JIN_V10.0_patch_output\app"))
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.93:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llava")
+SAM3_INSTALL_HINT = (
+    "Run: pip install -U ultralytics && pip uninstall clip -y && "
+    "pip install git+https://github.com/ultralytics/CLIP.git"
+)
+
+# Runtime-mutable config (can be updated via POST /api/config without restart)
+_runtime_cfg = {}
+_sam3_predictor_cache = {}
 
 
 def _safe_path(base, user_path):
@@ -60,6 +71,41 @@ def _remap_class_name(cls_id, model_name, id_to_name):
     if id_to_name and cls_id in id_to_name:
         return id_to_name[cls_id]
     return model_name
+
+
+def _labelstudio_image_name(image_ref, fallback_stem):
+    parsed = urllib.parse.urlparse(image_ref or "")
+    raw_name = Path(urllib.parse.unquote(parsed.path or image_ref or "")).name
+    if not raw_name:
+        raw_name = f"{fallback_stem}.jpg"
+    if not Path(raw_name).suffix:
+        raw_name = f"{raw_name}.jpg"
+    return raw_name.replace(" ", "_")
+
+
+def _copy_or_download_labelstudio_image(image_ref, dest_file):
+    parsed = urllib.parse.urlparse(image_ref or "")
+    if parsed.scheme in ("http", "https"):
+        with urllib.request.urlopen(image_ref, timeout=30) as src, dest_file.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+        return
+
+    candidates = []
+    if parsed.scheme == "file":
+        candidates.append(Path(urllib.request.url2pathname(parsed.path)))
+    if image_ref:
+        candidates.append(Path(image_ref))
+        candidates.append(DATASET / image_ref.lstrip("/\\"))
+
+    for candidate in candidates:
+        try:
+            if candidate.exists() and candidate.is_file():
+                shutil.copy2(candidate, dest_file)
+                return
+        except OSError:
+            continue
+
+    raise FileNotFoundError(f"image not found: {image_ref}")
 
 
 def ls_headers():
@@ -102,6 +148,83 @@ def _find_training_run(run_name):
         if candidate.exists():
             return candidate
     return None
+
+
+def _sam3_model_candidates():
+    return [
+        Path("sam3.pt"),
+        Path("models") / "sam3.pt",
+        MODEL_DIR / "sam3.pt",
+    ]
+
+
+def _find_sam3_model():
+    candidates = _sam3_model_candidates()
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate.resolve(), True
+    return candidates[-1].resolve(), False
+
+
+def _sam3_import_error():
+    try:
+        from ultralytics.models.sam import SAM3SemanticPredictor  # noqa: F401
+        return None
+    except ImportError as e:
+        return str(e)
+
+
+def _resolve_image_path(image_path):
+    if not image_path:
+        return None
+    candidate = Path(image_path)
+    if candidate.is_absolute():
+        return candidate if candidate.exists() and candidate.is_file() else None
+    try:
+        resolved = _safe_path(DATASET, image_path)
+    except Exception:
+        return None
+    return resolved if resolved.exists() and resolved.is_file() else None
+
+
+def _json_float_list(values):
+    return [round(float(v), 5) for v in values]
+
+
+def _serialize_sam3_results(results, text_prompts):
+    masks, boxes, labels = [], [], []
+    for result in results or []:
+        result_labels = []
+        if getattr(result, "boxes", None) is not None:
+            boxes_obj = result.boxes
+            xyxy = getattr(boxes_obj, "xyxy", [])
+            cls_values = getattr(boxes_obj, "cls", [])
+            names = getattr(result, "names", {}) or {}
+            for idx, box in enumerate(xyxy):
+                vals = box.tolist() if hasattr(box, "tolist") else list(box)
+                boxes.append(_json_float_list(vals[:4]))
+                label = None
+                try:
+                    cls_id = int(cls_values[idx])
+                    label = names.get(cls_id) or (
+                        text_prompts[cls_id] if cls_id < len(text_prompts) else None
+                    )
+                except Exception:
+                    pass
+                result_labels.append(label or (text_prompts[idx] if idx < len(text_prompts) else "concept"))
+
+        if getattr(result, "masks", None) is not None:
+            for mask_xy in getattr(result.masks, "xy", []) or []:
+                pts = mask_xy.tolist() if hasattr(mask_xy, "tolist") else mask_xy
+                poly = [[round(float(p[0]), 5), round(float(p[1]), 5)] for p in pts]
+                if len(poly) >= 3:
+                    masks.append(poly)
+
+        labels.extend(result_labels)
+
+    if len(labels) < len(boxes):
+        labels.extend(["concept"] * (len(boxes) - len(labels)))
+    return masks, boxes, labels[:len(boxes)]
 
 
 def _read_training_metrics(run_name):
@@ -151,6 +274,44 @@ def index():
 @app.route("/healthz")
 def healthz():
     return jsonify({"ok": True})
+
+
+@app.route("/api/config", methods=["GET"])
+def get_config():
+    return jsonify({
+        "ollama_url": _runtime_cfg.get("ollama_url", OLLAMA_URL),
+        "ollama_model": _runtime_cfg.get("ollama_model", OLLAMA_MODEL),
+        "sam_model": _runtime_cfg.get("sam_model", "sam2_b.pt"),
+        "dataset_path": _runtime_cfg.get("dataset_path", str(DATASET)),
+        "model_dir": _runtime_cfg.get("model_dir", str(MODEL_DIR)),
+        "yolo_url": _runtime_cfg.get("yolo_url", YOLO_URL),
+        "runs_path": str(RUNS),
+    })
+
+
+@app.route("/api/config", methods=["POST"])
+def set_config():
+    global OLLAMA_URL, OLLAMA_MODEL, DATASET, MODEL_DIR, YOLO_URL
+    data = request.json or {}
+    if "ollama_url" in data:
+        OLLAMA_URL = data["ollama_url"]
+        _runtime_cfg["ollama_url"] = OLLAMA_URL
+    if "ollama_model" in data:
+        OLLAMA_MODEL = data["ollama_model"]
+        _runtime_cfg["ollama_model"] = OLLAMA_MODEL
+    if "sam_model" in data:
+        _runtime_cfg["sam_model"] = data["sam_model"]
+    if "dataset_path" in data and data["dataset_path"]:
+        DATASET = Path(data["dataset_path"])
+        _runtime_cfg["dataset_path"] = str(DATASET)
+    if "model_dir" in data and data["model_dir"]:
+        MODEL_DIR = Path(data["model_dir"])
+        _runtime_cfg["model_dir"] = str(MODEL_DIR)
+    if "yolo_url" in data:
+        YOLO_URL = data["yolo_url"]
+        _runtime_cfg["yolo_url"] = YOLO_URL
+    return jsonify({"ok": True, "config": _runtime_cfg})
+
 
 
 # ── API: Projects ─────────────────────────────────────────────────────
@@ -786,6 +947,139 @@ def api_import_upload():
     })
 
 
+@app.route("/api/import/labelstudio", methods=["POST"])
+def api_import_labelstudio():
+    """Import a Label Studio JSON export into YOLO image/label folders."""
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"imported": 0, "skipped": 0, "classes": [], "errors": ["file required"]}), 400
+
+    try:
+        payload = json.load(upload.stream)
+    except Exception as exc:
+        return jsonify({"imported": 0, "skipped": 0, "classes": [], "errors": [f"invalid json: {exc}"]}), 400
+
+    tasks = payload.get("tasks") if isinstance(payload, dict) else payload
+    if not isinstance(tasks, list):
+        return jsonify({"imported": 0, "skipped": 0, "classes": [], "errors": ["expected a list of tasks"]}), 400
+
+    def task_label_results(task):
+        annotations = task.get("annotations") or []
+        if not annotations:
+            return []
+        results = annotations[0].get("result") or []
+        return results if isinstance(results, list) else []
+
+    def result_label(result):
+        value = result.get("value") or {}
+        if result.get("type") == "rectanglelabels":
+            labels = value.get("rectanglelabels") or []
+        elif result.get("type") == "polygonlabels":
+            labels = value.get("polygonlabels") or []
+        else:
+            labels = []
+        return labels[0] if labels else ""
+
+    classes = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        for result in task_label_results(task):
+            label = result_label(result)
+            if label and label not in classes:
+                classes.append(label)
+
+    class_to_id = {name: idx for idx, name in enumerate(classes)}
+
+    def safe_class_dir(label):
+        cleaned = "".join(ch if ch not in '<>:"/\\|?*' else "_" for ch in label).strip(" .")
+        return cleaned or "unlabeled"
+
+    imported = 0
+    skipped = 0
+    errors = []
+
+    for idx, task in enumerate(tasks):
+        if not isinstance(task, dict):
+            skipped += 1
+            errors.append(f"task {idx}: invalid task object")
+            continue
+
+        results = task_label_results(task)
+        rows = []
+        primary_class = ""
+
+        for result in results:
+            label = result_label(result)
+            if not label:
+                continue
+            if not primary_class:
+                primary_class = label
+            cid = class_to_id[label]
+            value = result.get("value") or {}
+
+            try:
+                if result.get("type") == "rectanglelabels":
+                    x = float(value.get("x", 0))
+                    y = float(value.get("y", 0))
+                    w = float(value.get("width", 0))
+                    h = float(value.get("height", 0))
+                    cx = (x + w / 2) / 100
+                    cy = (y + h / 2) / 100
+                    rows.append(f"{cid} {cx:.6f} {cy:.6f} {w / 100:.6f} {h / 100:.6f}")
+                elif result.get("type") == "polygonlabels":
+                    points = value.get("points") or []
+                    if len(points) < 3:
+                        continue
+                    coords = []
+                    for point in points:
+                        coords.extend([float(point[0]) / 100, float(point[1]) / 100])
+                    flat = " ".join(f"{coord:.6f}" for coord in coords)
+                    rows.append(f"{cid} {flat}")
+            except (TypeError, ValueError, IndexError) as exc:
+                errors.append(f"task {task.get('id', idx)}: invalid annotation: {exc}")
+
+        image_ref = (task.get("data") or {}).get("image", "")
+        if not image_ref or not rows or not primary_class:
+            skipped += 1
+            errors.append(f"task {task.get('id', idx)}: missing image or annotations")
+            continue
+
+        class_dir = safe_class_dir(primary_class)
+        image_dir = _safe_path(DATASET, f"auto_improve/images/train/{class_dir}")
+        label_dir = _safe_path(DATASET, f"auto_improve/labels/train/{class_dir}")
+        image_dir.mkdir(parents=True, exist_ok=True)
+        label_dir.mkdir(parents=True, exist_ok=True)
+
+        image_name = _labelstudio_image_name(image_ref, f"labelstudio_{idx}")
+        dest_image = image_dir / image_name
+        if dest_image.exists():
+            stem = dest_image.stem
+            suffix = dest_image.suffix or ".jpg"
+            dest_image = image_dir / f"{stem}_{idx}{suffix}"
+        label_file = label_dir / f"{dest_image.stem}.txt"
+
+        try:
+            _copy_or_download_labelstudio_image(image_ref, dest_image)
+            label_file.write_text("\n".join(rows) + "\n", encoding="utf-8")
+            imported += 1
+        except Exception as exc:
+            skipped += 1
+            errors.append(f"task {task.get('id', idx)}: {exc}")
+            if dest_image.exists():
+                try:
+                    dest_image.unlink()
+                except OSError:
+                    pass
+
+    return jsonify({
+        "imported": imported,
+        "skipped": skipped,
+        "classes": classes,
+        "errors": errors,
+    })
+
+
 @app.route("/api/import/classes")
 def api_import_classes():
     """List existing classes from dataset structure"""
@@ -924,6 +1218,91 @@ def api_generate_yaml():
 
 
 # ── API: SAM Segmentation ─────────────────────────────────────────────
+@app.route("/api/sam3/status", methods=["GET"])
+def api_sam3_status():
+    model_path, model_exists = _find_sam3_model()
+    import_error = _sam3_import_error()
+    return jsonify({
+        "available": bool(model_exists and not import_error),
+        "model_exists": model_exists,
+        "model_path": str(model_path),
+        **({"error": import_error, "hint": SAM3_INSTALL_HINT} if import_error else {}),
+    })
+
+
+@app.route("/api/sam3/predict", methods=["POST"])
+def api_sam3_predict():
+    data = request.json or {}
+    image_path = data.get("image_path", "")
+    text_prompts = data.get("text") or []
+    if isinstance(text_prompts, str):
+        text_prompts = [text_prompts]
+    text_prompts = [str(t).strip() for t in text_prompts if str(t).strip()]
+    if not text_prompts:
+        return jsonify({"error": "text prompts required"}), 400
+
+    try:
+        conf = float(data.get("conf", 0.25))
+    except (TypeError, ValueError):
+        conf = 0.25
+
+    sam3_path, model_exists = _find_sam3_model()
+    if not model_exists:
+        return jsonify({
+            "error": "sam3.pt not found",
+            "hint": "Download from https://huggingface.co/facebook/sam3",
+        })
+
+    try:
+        from ultralytics.models.sam import SAM3SemanticPredictor
+    except ImportError:
+        return jsonify({
+            "error": f"SAM3 not available. {SAM3_INSTALL_HINT}",
+        })
+
+    resolved_image = _resolve_image_path(image_path)
+    if not resolved_image:
+        return jsonify({"error": "image_path not found"}), 404
+
+    cache_key = str(resolved_image.resolve())
+    cached = _sam3_predictor_cache.get(cache_key)
+    if cached and cached.get("model_path") == str(sam3_path):
+        predictor = cached["predictor"]
+    else:
+        overrides = dict(
+            conf=conf,
+            task="segment",
+            mode="predict",
+            model=str(sam3_path),
+            verbose=False,
+        )
+        try:
+            predictor = SAM3SemanticPredictor(overrides=overrides)
+            predictor.set_image(str(resolved_image))
+        except Exception as e:
+            return jsonify({"error": f"SAM3: {e}"}), 500
+        _sam3_predictor_cache.clear()
+        _sam3_predictor_cache[cache_key] = {
+            "model_path": str(sam3_path),
+            "predictor": predictor,
+        }
+
+    try:
+        if hasattr(predictor, "args"):
+            predictor.args.conf = conf
+        results = predictor(text=text_prompts)
+    except Exception as e:
+        return jsonify({"error": f"SAM3: {e}"}), 500
+
+    masks, boxes, labels = _serialize_sam3_results(results, text_prompts)
+    return jsonify({
+        "masks": masks,
+        "boxes": boxes,
+        "labels": labels,
+        "count": len(boxes),
+    })
+
+
 @app.route("/api/sam/predict", methods=["POST"])
 def api_sam_predict():
     try:

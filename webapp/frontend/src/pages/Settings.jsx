@@ -36,6 +36,11 @@ export default function Settings() {
     api.projects().then(data => {
       setProjects(Array.isArray(data) ? data : [])
     }).catch(() => {})
+    // Load config from backend
+    api.getConfig().then(cfg => {
+      setForm(f => ({ ...f, ...cfg }))
+      localStorage.setItem(LS_KEY, JSON.stringify({ ...loadSettings(), ...cfg }))
+    }).catch(() => {})
   }, [])
 
   function set(key, val) {
@@ -43,10 +48,15 @@ export default function Settings() {
     setSaved(false)
   }
 
-  function save() {
-    localStorage.setItem(LS_KEY, JSON.stringify(form))
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  async function save() {
+    try {
+      await api.setConfig(form)
+      localStorage.setItem(LS_KEY, JSON.stringify(form))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      alert('บันทึกไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ backend')
+    }
   }
 
   function reset() {

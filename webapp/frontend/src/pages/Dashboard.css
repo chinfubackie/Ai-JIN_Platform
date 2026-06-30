@@ -94,7 +94,9 @@
   flex-direction: column;
   gap: 6px;
   transition: all 0.25s ease;
-  cursor: default;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
 }
 .dash-stat-card:hover {
   border-color: var(--accent);
@@ -178,6 +180,9 @@
   overflow: hidden;
   transition: all 0.25s ease;
   cursor: pointer;
+  padding: 0;
+  text-align: left;
+  font: inherit;
 }
 .dash-dataset-card:hover {
   transform: scale(1.02);
@@ -281,6 +286,11 @@
   gap: 14px;
   align-items: flex-start;
   transition: all 0.2s ease;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
 }
 .dash-project-card:hover {
   border-color: var(--accent);

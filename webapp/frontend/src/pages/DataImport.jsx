@@ -20,6 +20,12 @@ export default function DataImport() {
   const fileInputRef = useRef(null)
   const [projects, setProjects] = useState([])
   const [selectedProject, setSelectedProject] = useState('')
+  const [lsFile, setLsFile] = useState(null)
+  const [lsDragOver, setLsDragOver] = useState(false)
+  const [lsUploading, setLsUploading] = useState(false)
+  const [lsProgress, setLsProgress] = useState(0)
+  const [lsResult, setLsResult] = useState(null)
+  const lsFileInputRef = useRef(null)
 
   // Browse state
   const [folders, setFolders] = useState([])
@@ -128,6 +134,26 @@ export default function DataImport() {
     setFiles(prev => prev.filter((_, i) => i !== idx))
   }
 
+  const handleLabelStudioFile = (file) => {
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      showToast('กรุณาเลือกไฟล์ .json จาก Label Studio', 'error')
+      return
+    }
+    setLsFile(file)
+    setLsResult(null)
+  }
+
+  const handleLabelStudioSelect = (e) => {
+    handleLabelStudioFile(e.target.files?.[0])
+  }
+
+  const handleLabelStudioDrop = (e) => {
+    e.preventDefault()
+    setLsDragOver(false)
+    handleLabelStudioFile(e.dataTransfer.files?.[0])
+  }
+
   // --- Upload ---
   const handleUpload = async () => {
     if (files.length === 0) return
@@ -174,6 +200,33 @@ export default function DataImport() {
     } finally {
       setUploading(false)
       setTimeout(() => setProgress(0), 1500)
+    }
+  }
+
+  const handleLabelStudioImport = async () => {
+    if (!lsFile || lsUploading) return
+    setLsUploading(true)
+    setLsProgress(0)
+    setLsResult(null)
+    const progressInterval = setInterval(() => {
+      setLsProgress(prev => {
+        if (prev >= 90) { clearInterval(progressInterval); return 90 }
+        return prev + 15
+      })
+    }, 200)
+    try {
+      const res = await api.importLabelStudio(lsFile)
+      clearInterval(progressInterval)
+      setLsProgress(100)
+      setLsResult(res)
+      showToast(`นำเข้า Label Studio สำเร็จ ${res.imported ?? 0} ภาพ`)
+      refreshAll()
+    } catch (err) {
+      setLsResult({ imported: 0, skipped: 0, classes: [], errors: [err.message] })
+      showToast(`นำเข้า Label Studio ล้มเหลว: ${err.message}`, 'error')
+    } finally {
+      setLsUploading(false)
+      setTimeout(() => setLsProgress(0), 1500)
     }
   }
 
@@ -367,6 +420,89 @@ export default function DataImport() {
                 {uploading ? 'กำลังอัปโหลด...' : `อัปโหลด (${files.length} ไฟล์)`}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Label Studio Import ---- */}
+      <div className="card di-section">
+        <div className="card-title">Label Studio</div>
+        <div className="di-upload-grid">
+          <div>
+            <div
+              className={`di-dropzone${lsDragOver ? ' drag-over' : ''}`}
+              onClick={() => lsFileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setLsDragOver(true) }}
+              onDragLeave={() => setLsDragOver(false)}
+              onDrop={handleLabelStudioDrop}
+            >
+              <div className="di-dropzone-icon"><FileCode size={32} /></div>
+              <div className="di-dropzone-text">นำเข้า Label Studio JSON</div>
+              <div className="di-dropzone-hint">รองรับไฟล์ export .json หนึ่งไฟล์</div>
+              <input
+                ref={lsFileInputRef}
+                type="file"
+                accept="application/json,.json"
+                style={{ display: 'none' }}
+                onChange={handleLabelStudioSelect}
+              />
+            </div>
+
+            {lsFile && (
+              <div className="di-file-list">
+                <div className="di-file-item">
+                  <FileCode size={12} />
+                  <span>{lsFile.name}</span>
+                  <button onClick={() => { setLsFile(null); setLsResult(null) }}><X size={12} /></button>
+                </div>
+              </div>
+            )}
+
+            {lsProgress > 0 && (
+              <div className="di-progress">
+                <div className="di-progress-bar">
+                  <div className="di-progress-fill" style={{ width: `${lsProgress}%` }} />
+                </div>
+                <div className="di-progress-text">{lsProgress}%</div>
+              </div>
+            )}
+          </div>
+
+          <div className="di-upload-options">
+            <div className="di-field">
+              <label>ปลายทาง</label>
+              <div className="di-static-field">auto_improve/images/train/&lt;class&gt;</div>
+            </div>
+            <div className="di-upload-actions">
+              <button
+                className="btn btn-primary"
+                onClick={handleLabelStudioImport}
+                disabled={!lsFile || lsUploading}
+              >
+                <Upload size={14} />
+                {lsUploading ? 'กำลังนำเข้า...' : 'นำเข้า'}
+              </button>
+            </div>
+
+            {lsResult && (
+              <div className="di-ls-result">
+                <div className="di-ls-summary">
+                  นำเข้าสำเร็จ {lsResult.imported ?? 0} ภาพ, {(lsResult.classes || []).length} class:
+                  {' '}
+                  {(lsResult.classes || []).length ? (lsResult.classes || []).join(', ') : '-'}
+                </div>
+                {(lsResult.skipped ?? 0) > 0 && (
+                  <div className="di-ls-skipped">ข้าม {lsResult.skipped} task</div>
+                )}
+                {(lsResult.errors || []).length > 0 && (
+                  <div className="di-ls-errors">
+                    {(lsResult.errors || []).map((err, i) => (
+                      <div key={`${err}-${i}`}>{err}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

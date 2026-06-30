@@ -189,6 +189,56 @@
   outline: none;
 }
 
+.ann-sam3-panel {
+  margin: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.ann-sam3-warning {
+  padding: 6px 8px;
+  border: 1px solid rgba(234,179,8,0.45);
+  border-radius: 6px;
+  background: rgba(234,179,8,0.12);
+  color: #facc15;
+  font-size: 11px;
+  font-weight: 700;
+}
+.ann-sam3-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ann-sam3-input {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+.ann-sam3-input:focus { border-color: #a855f7; }
+.ann-sam3-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 6px;
+  background: #a855f7;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ann-sam3-button:hover:not(:disabled) { filter: brightness(1.12); }
+.ann-sam3-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* SAM preview confirm panel */
 .ann-sam-preview {
   padding: 10px 12px;

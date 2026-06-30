@@ -51,6 +51,11 @@ export const api = {
     }),
   importUpload: (formData) =>
     fetchJSON('/import/upload', { method: 'POST', body: formData }),
+  importLabelStudio: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return fetchJSON('/import/labelstudio', { method: 'POST', body: formData })
+  },
   importClasses: () => fetchJSON('/import/classes'),
   importSplitInfo: () => fetchJSON('/import/split-info'),
   importDelete: (files) =>
@@ -71,6 +76,12 @@ export const api = {
   // SAM segmentation
   samPredict: (formData) =>
     fetchJSON('/sam/predict', { method: 'POST', body: formData }),
+  sam3Status: () => fetchJSON('/sam3/status'),
+  sam3Predict: (data) => fetchJSON('/sam3/predict', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }),
 
   // Extended labels (boxes + polygons)
   labelExt: (path) => fetchJSON(`/label/ext/${path}`),
@@ -119,6 +130,14 @@ export const api = {
   registry: (projectId) => fetchJSON(`/registry${projectId ? `?project_id=${projectId}` : ''}`),
   registryDeploy: (mid) =>
     fetchJSON(`/registry/${mid}/deploy`, { method: 'POST' }),
+
+  // System config
+  getConfig: () => fetchJSON('/config'),
+  setConfig: (data) => fetchJSON('/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }),
 
   // LM Assistant (Ollama)
   lmModels: () => fetchJSON('/lm/models'),
