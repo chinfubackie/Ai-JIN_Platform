@@ -1,45 +1,46 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import {
-  FolderOpen,
-  Image,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Loader2,
-  Database,
-  Tag,
+  FolderOpen, Image, ChevronLeft, ChevronRight,
+  X, Loader2, Tag, Pencil, LayoutGrid,
 } from 'lucide-react'
 import './Dataset.css'
 
 const PER_PAGE = 60
 
-// Deterministic color for each class index
 const BOX_COLORS = [
-  '#22c55e', '#6366f1', '#ef4444', '#eab308', '#06b6d4',
-  '#ec4899', '#f97316', '#8b5cf6', '#14b8a6', '#f43f5e',
+  '#6366f1','#22c55e','#ef4444','#eab308','#06b6d4',
+  '#f97316','#a855f7','#ec4899','#14b8a6','#84cc16',
 ]
 
-export default function Dataset() {
-  const [folders, setFolders] = useState([])
-  const [activeFolder, setActiveFolder] = useState(null)
-  const [images, setImages] = useState([])   // [{path, labeled, annotation_count}]
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [foldersLoading, setFoldersLoading] = useState(true)
-  const [projects, setProjects] = useState([])
-  const [activeProject, setActiveProject] = useState('')
-  const [syncing, setSyncing] = useState(false)
+// Detect split from folder path
+function detectSplit(path) {
+  if (/\/train\/|\\train\\|^train\//i.test(path)) return 'train'
+  if (/\/val\/|\\val\\|^val\//i.test(path))       return 'val'
+  if (/\/test\/|\\test\\|^test\//i.test(path))     return 'test'
+  return 'other'
+}
 
-  // Modal state
-  const [modalImage, setModalImage] = useState(null)
+export default function Dataset() {
+  const navigate = useNavigate()
+
+  const [folders, setFolders]   = useState([])
+  const [activeFolder, setActiveFolder] = useState(null)
+  const [images, setImages]     = useState([])
+  const [total, setTotal]       = useState(0)
+  const [page, setPage]         = useState(1)
+  const [loading, setLoading]   = useState(false)
+  const [foldersLoading, setFoldersLoading] = useState(true)
+  const [activeSplit, setActiveSplit] = useState('all')
+
+  // Modal / lightbox
+  const [lightbox, setLightbox] = useState(null)  // { imgPath, imgIdx }
   const [labelData, setLabelData] = useState(null)
   const [labelLoading, setLabelLoading] = useState(false)
   const canvasRef = useRef(null)
-  const imgRef = useRef(null)
+  const imgRef    = useRef(null)
 
-  // Load folders + projects on mount
   useEffect(() => {
     setFoldersLoading(true)
     api.folders()
@@ -50,15 +51,12 @@ export default function Dataset() {
       })
       .catch(console.error)
       .finally(() => setFoldersLoading(false))
-    api.projects().then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
 
-  // Load images when folder or page changes — keep as objects {path,labeled,annotation_count}
   useEffect(() => {
     if (!activeFolder) return
     setLoading(true)
-    api
-      .images(activeFolder, page, PER_PAGE)
+    api.images(activeFolder, page, PER_PAGE)
       .then((res) => {
         const imgs = (res.images || []).map(i =>
           typeof i === 'string' ? { path: i, labeled: 0, annotation_count: 0 } : i
@@ -70,239 +68,196 @@ export default function Dataset() {
       .finally(() => setLoading(false))
   }, [activeFolder, page])
 
-  const handleSync = async () => {
-    if (!activeProject) return
-    setSyncing(true)
-    try {
-      await api.projectSync(parseInt(activeProject))
-      // Reload images after sync
-      const res = await api.images(activeFolder, page, PER_PAGE)
-      setImages((res.images || []).map(i =>
-        typeof i === 'string' ? { path: i, labeled: 0, annotation_count: 0 } : i
-      ))
-      setTotal(res.total || 0)
-    } catch { /* silent */ } finally { setSyncing(false) }
-  }
+  // Compute split counts from folder list
+  const splitCounts = folders.reduce((acc, f) => {
+    const s = detectSplit(f)
+    acc[s] = (acc[s] || 0) + 1
+    return acc
+  }, {})
+
+  // Filtered folders by split tab
+  const visibleFolders = activeSplit === 'all'
+    ? folders
+    : folders.filter(f => detectSplit(f) === activeSplit)
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
 
-  const handleFolderClick = (folder) => {
-    if (folder === activeFolder) return
-    setActiveFolder(folder)
-    setPage(1)
-    setImages([])
-    setTotal(0)
-  }
+  // Stats from loaded images
+  const labeledCount = images.filter(i => i.labeled === 1 || i.labeled === true).length
+  const totalAnn = images.reduce((s, i) => s + (i.annotation_count || 0), 0)
 
-  // openModal still receives the path string
-  const getPath = (img) => (typeof img === 'string' ? img : img.path)
-
-  // -- Modal --
-  const openModal = (imgPath) => {
-    setModalImage(imgPath)
+  // ---- Lightbox ----
+  const openLightbox = (imgPath, imgIdx) => {
+    setLightbox({ imgPath, imgIdx })
     setLabelData(null)
     setLabelLoading(true)
-    api
-      .label(imgPath)
+    api.label(imgPath)
       .then(setLabelData)
       .catch(() => setLabelData(null))
       .finally(() => setLabelLoading(false))
   }
 
-  const closeModal = () => {
-    setModalImage(null)
-    setLabelData(null)
-  }
+  const closeLightbox = () => { setLightbox(null); setLabelData(null) }
 
-  // Close modal on Escape
   useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') closeModal()
-    }
+    const onKey = (e) => { if (e.key === 'Escape') closeLightbox() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Draw bounding boxes when label data or image loads
   const drawBoxes = useCallback(() => {
     const canvas = canvasRef.current
-    const img = imgRef.current
+    const img    = imgRef.current
     if (!canvas || !img || !labelData) return
 
-    const dispW = img.clientWidth
-    const dispH = img.clientHeight
-
-    canvas.width = dispW
-    canvas.height = dispH
+    const W = img.clientWidth
+    const H = img.clientHeight
+    canvas.width  = W
+    canvas.height = H
 
     const ctx = canvas.getContext('2d')
-    ctx.clearRect(0, 0, dispW, dispH)
+    ctx.clearRect(0, 0, W, H)
 
-    const labels = labelData.labels || []
-    labels.forEach((lb) => {
-      const classId = Number(lb.class_id ?? 0)
-      const cx = Number(lb.cx ?? 0) * dispW
-      const cy = Number(lb.cy ?? 0) * dispH
-      const bw = Number(lb.w ?? 0) * dispW
-      const bh = Number(lb.h ?? 0) * dispH
-
+    ;(labelData.labels || []).forEach((lb) => {
+      const cid  = Number(lb.class_id ?? 0)
+      const cx   = Number(lb.cx ?? 0) * W
+      const cy   = Number(lb.cy ?? 0) * H
+      const bw   = Number(lb.w  ?? 0) * W
+      const bh   = Number(lb.h  ?? 0) * H
       const x = cx - bw / 2
       const y = cy - bh / 2
 
-      const color = BOX_COLORS[classId % BOX_COLORS.length]
-      ctx.strokeStyle = color
-      ctx.lineWidth = 2
+      const col = BOX_COLORS[cid % BOX_COLORS.length]
+      ctx.strokeStyle = col
+      ctx.lineWidth   = 2
       ctx.strokeRect(x, y, bw, bh)
 
-      // Class label background
-      const label = labelData.classes?.[classId] ?? `class ${classId}`
+      const lbl = labelData.classes?.[cid] ?? `class ${cid}`
       ctx.font = 'bold 12px Inter, system-ui, sans-serif'
-      const tm = ctx.measureText(label)
-      const labelH = 18
-      ctx.fillStyle = color
-      ctx.fillRect(x, y - labelH, tm.width + 8, labelH)
+      const tm = ctx.measureText(lbl)
+      ctx.fillStyle = col
+      ctx.fillRect(x, y - 18, tm.width + 8, 18)
       ctx.fillStyle = '#fff'
-      ctx.fillText(label, x + 4, y - 5)
+      ctx.fillText(lbl, x + 4, y - 5)
     })
   }, [labelData])
 
-  const handleImgLoad = () => {
-    drawBoxes()
+  useEffect(() => { drawBoxes() }, [drawBoxes])
+
+  const openInAnnotator = () => {
+    if (!lightbox || !activeFolder) return
+    localStorage.setItem('ann_last_folder', activeFolder)
+    localStorage.setItem(`ann_idx_${activeFolder}`, String(lightbox.imgIdx))
+    navigate('/annotator')
   }
 
-  useEffect(() => {
-    drawBoxes()
-  }, [drawBoxes])
-
-  // Count boxes in label
-  const boxCount = labelData
-    ? (labelData.labels || []).length
-    : 0
-
-  // Unique classes in this label
+  const boxCount    = (labelData?.labels || []).length
   const labelClasses = labelData
-    ? [
-        ...new Set(
-          (labelData.labels || [])
-            .map((lb) => {
-              const id = Number(lb.class_id ?? 0)
-              return labelData.classes?.[id] ?? `class ${id}`
-            })
-        ),
-      ]
+    ? [...new Set((labelData.labels || []).map(lb => {
+        const id = Number(lb.class_id ?? 0)
+        return labelData.classes?.[id] ?? `class ${id}`
+      }))]
     : []
 
+  const SPLITS = [
+    { key: 'all',   label: 'ทั้งหมด', count: folders.length },
+    { key: 'train', label: 'Train',   count: splitCounts.train || 0 },
+    { key: 'val',   label: 'Val',     count: splitCounts.val   || 0 },
+    { key: 'test',  label: 'Test',    count: splitCounts.test  || 0 },
+  ]
+
   return (
-    <div>
-      <div className="page-header">
+    <div className="ds-page">
+      {/* ── Header ── */}
+      <div className="ds-header">
         <h1 className="page-title">ชุดข้อมูล</h1>
+        <div className="ds-stats-row">
+          <span className="ds-stat"><LayoutGrid size={13} /> {total} ภาพ</span>
+          <span className="ds-stat ds-stat-green">{labeledCount} labeled</span>
+          <span className="ds-stat ds-stat-purple">{totalAnn} annotations</span>
+        </div>
       </div>
 
-      <div className="dataset-layout">
-        {/* ---- Folder sidebar ---- */}
-        <div className="dataset-sidebar">
-          <div className="dataset-sidebar-header">
-            <FolderOpen size={16} />
-            โฟลเดอร์
+      {/* ── Split tabs ── */}
+      <div className="ds-split-tabs">
+        {SPLITS.map(s => (
+          <button
+            key={s.key}
+            className={`ds-tab ${activeSplit === s.key ? 'active' : ''}`}
+            onClick={() => { setActiveSplit(s.key); setActiveFolder(null); setImages([]); setPage(1) }}
+          >
+            {s.label}
+            {s.count > 0 && <span className="ds-tab-badge">{s.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      <div className="ds-layout">
+        {/* ── Folder sidebar ── */}
+        <div className="ds-sidebar">
+          <div className="ds-sidebar-hd">
+            <FolderOpen size={14} /> โฟลเดอร์
           </div>
-          <div className="dataset-folder-list">
+          <div className="ds-folder-list">
             {foldersLoading && (
-              <div className="dataset-loading" style={{ padding: 20 }}>
-                <Loader2 size={16} className="spin" />
-                กำลังโหลด...
-              </div>
+              <div className="ds-state"><Loader2 size={14} className="spin" /> กำลังโหลด...</div>
             )}
-            {!foldersLoading && folders.length === 0 && (
-              <div style={{ padding: 16, color: 'var(--text-muted)', fontSize: 13 }}>
-                ไม่พบโฟลเดอร์
-              </div>
+            {!foldersLoading && visibleFolders.length === 0 && (
+              <div className="ds-state" style={{ color: 'var(--text-muted)' }}>ไม่พบโฟลเดอร์</div>
             )}
-            {folders.map((f) => (
-              <button
-                key={f}
-                className={`dataset-folder-item${f === activeFolder ? ' active' : ''}`}
-                onClick={() => handleFolderClick(f)}
-              >
-                <FolderOpen size={15} className="folder-icon" />
-                {f}
-              </button>
-            ))}
+            {visibleFolders.map((f) => {
+              const split = detectSplit(f)
+              return (
+                <button
+                  key={f}
+                  className={`ds-folder-item ${f === activeFolder ? 'active' : ''}`}
+                  onClick={() => { if (f !== activeFolder) { setActiveFolder(f); setPage(1); setImages([]) } }}
+                >
+                  <FolderOpen size={13} className={`ds-fi-icon split-${split}`} />
+                  <span className="ds-fi-label">{f}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* ---- Image grid area ---- */}
-        <div className="dataset-main">
-          {/* Project selector bar */}
-          {projects.length > 0 && (
-            <div className="dataset-project-bar">
-              <Tag size={14} />
-              <span>โปรเจกต์:</span>
-              <select
-                value={activeProject}
-                onChange={e => setActiveProject(e.target.value)}
-                className="dataset-project-select"
-              >
-                <option value="">-- ไม่ระบุ --</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              {activeProject && (
-                <button
-                  className="btn btn-outline"
-                  onClick={handleSync}
-                  disabled={syncing}
-                  style={{ padding: '3px 10px', fontSize: 12 }}
-                >
-                  {syncing ? 'Syncing...' : 'Sync → DB'}
-                </button>
-              )}
-            </div>
-          )}
-
+        {/* ── Image grid ── */}
+        <div className="ds-main">
           {activeFolder ? (
             <>
-              <div className="dataset-toolbar">
-                <div className="dataset-info">
-                  <span className="folder-label">
-                    <Database size={14} style={{ verticalAlign: -2, marginRight: 4 }} />
-                    {activeFolder}
-                  </span>
-                  <span className="image-count">{total} ภาพ</span>
-                </div>
+              <div className="ds-toolbar">
+                <span className="ds-folder-name">
+                  <FolderOpen size={14} /> {activeFolder}
+                </span>
+                <span className="ds-count">{total} ภาพ · หน้า {page}/{totalPages}</span>
               </div>
 
               {loading ? (
-                <div className="dataset-loading">
-                  <Loader2 size={18} />
-                  กำลังโหลดรูปภาพ...
-                </div>
+                <div className="ds-state ds-state-full"><Loader2 size={18} className="spin" /> กำลังโหลด...</div>
               ) : images.length === 0 ? (
-                <div className="dataset-empty">
-                  <Image size={48} />
-                  <span>ไม่พบรูปภาพในโฟลเดอร์นี้</span>
-                </div>
+                <div className="ds-state ds-state-full"><Image size={40} style={{ opacity: 0.3 }} /> ไม่พบรูปภาพ</div>
               ) : (
                 <>
-                  <div className="dataset-grid-wrap">
-                    <div className="dataset-grid">
-                      {images.map((img) => {
-                        const imgPath = getPath(img)
-                        const name = imgPath.split('/').pop()
+                  <div className="ds-grid-wrap">
+                    <div className="ds-grid">
+                      {images.map((img, idx) => {
+                        const imgPath = typeof img === 'string' ? img : img.path
+                        const name    = imgPath.split('/').pop().split('\\').pop()
                         const labeled = img.labeled === 1 || img.labeled === true
-                        const annCount = img.annotation_count || 0
+                        const ann     = img.annotation_count || 0
                         return (
                           <div
                             key={imgPath}
-                            className="dataset-thumb"
-                            onClick={() => openModal(imgPath)}
+                            className="ds-thumb"
+                            onClick={() => openLightbox(imgPath, idx)}
                             title={name}
                           >
                             <img src={api.image(imgPath)} alt={name} loading="lazy" />
-                            <div className="dataset-thumb-footer">
-                              <span className="dataset-thumb-name">{name}</span>
-                              <span className={`ds-labeled-badge ${labeled ? 'labeled' : 'unlabeled'}`}>
-                                {labeled ? `✓ ${annCount}` : 'unlabeled'}
+                            {ann > 0 && <span className="ds-ann-badge">{ann}</span>}
+                            <div className="ds-thumb-footer">
+                              <span className="ds-thumb-name">{name}</span>
+                              <span className={`ds-label-dot ${labeled ? 'labeled' : 'unlabeled'}`}>
+                                {labeled ? 'labeled' : 'unlabeled'}
                               </span>
                             </div>
                           </div>
@@ -311,87 +266,80 @@ export default function Dataset() {
                     </div>
                   </div>
 
-                  <div className="dataset-pagination">
-                    <button
-                      className="btn btn-outline"
-                      disabled={page <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    >
-                      <ChevronLeft size={16} />
-                      ก่อนหน้า
+                  <div className="ds-pagination">
+                    <button className="btn btn-outline" disabled={page <= 1}
+                      onClick={() => setPage(p => Math.max(1, p - 1))}>
+                      <ChevronLeft size={15} /> ก่อนหน้า
                     </button>
-                    <span className="page-info">
-                      หน้า {page} / {totalPages}
-                    </span>
-                    <button
-                      className="btn btn-outline"
-                      disabled={page >= totalPages}
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    >
-                      ถัดไป
-                      <ChevronRight size={16} />
+                    <span className="ds-page-info">หน้า {page} / {totalPages}</span>
+                    <button className="btn btn-outline" disabled={page >= totalPages}
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+                      ถัดไป <ChevronRight size={15} />
                     </button>
                   </div>
                 </>
               )}
             </>
           ) : (
-            <div className="dataset-empty">
-              <FolderOpen size={48} />
-              <span>เลือกโฟลเดอร์เพื่อดูรูปภาพ</span>
+            <div className="ds-state ds-state-full">
+              <FolderOpen size={40} style={{ opacity: 0.3 }} />
+              เลือกโฟลเดอร์เพื่อดูรูปภาพ
             </div>
           )}
         </div>
       </div>
 
-      {/* ---- Image detail modal ---- */}
-      {modalImage && (
-        <div className="dataset-modal-overlay" onClick={closeModal}>
-          <div className="dataset-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="dataset-modal-header">
-              <h3>{modalImage.split('/').pop()}</h3>
-              <button className="dataset-modal-close" onClick={closeModal}>
-                <X size={18} />
-              </button>
+      {/* ── Full-screen lightbox ── */}
+      {lightbox && (
+        <div className="ds-lb-overlay" onClick={closeLightbox}>
+          <div className="ds-lb" onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="ds-lb-header">
+              <span className="ds-lb-title">
+                {lightbox.imgPath.split('/').pop().split('\\').pop()}
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-primary" onClick={openInAnnotator}>
+                  <Pencil size={14} /> เปิดใน Annotator
+                </button>
+                <button className="ds-lb-close" onClick={closeLightbox}><X size={18} /></button>
+              </div>
             </div>
 
-            <div className="dataset-modal-body">
+            {/* Image canvas */}
+            <div className="ds-lb-body">
               {labelLoading ? (
-                <div className="dataset-loading">
-                  <Loader2 size={18} />
-                  กำลังโหลด Label...
-                </div>
+                <div className="ds-state"><Loader2 size={18} className="spin" /> กำลังโหลด...</div>
               ) : (
-                <div className="dataset-modal-canvas-wrap">
+                <div className="ds-lb-canvas-wrap">
                   <img
                     ref={imgRef}
-                    src={api.image(modalImage)}
-                    alt={modalImage}
-                    onLoad={handleImgLoad}
-                    style={{ maxWidth: '100%', maxHeight: '70vh' }}
+                    src={api.image(lightbox.imgPath)}
+                    alt={lightbox.imgPath}
+                    onLoad={drawBoxes}
                   />
                   <canvas ref={canvasRef} />
                 </div>
               )}
             </div>
 
-            <div className="dataset-modal-footer">
-              <div className="label-stat">
+            {/* Footer */}
+            <div className="ds-lb-footer">
+              <div className="ds-lb-info">
                 <Tag size={13} />
-                Bounding boxes: <strong>{boxCount}</strong>
+                <strong>{boxCount}</strong> bounding box{boxCount !== 1 ? 'es' : ''}
               </div>
-              {labelClasses.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {labelClasses.map((cls) => (
-                    <span key={cls} className="badge badge-green">
-                      {cls}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {labelData === null && !labelLoading && (
-                <span className="label-stat">ไม่พบข้อมูล Label</span>
-              )}
+              <div className="ds-lb-classes">
+                {labelClasses.map((cls, i) => (
+                  <span key={cls} className="badge" style={{ background: BOX_COLORS[i % BOX_COLORS.length] + '33', color: BOX_COLORS[i % BOX_COLORS.length] }}>
+                    {cls}
+                  </span>
+                ))}
+                {labelData === null && !labelLoading && (
+                  <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>ไม่มี label</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
