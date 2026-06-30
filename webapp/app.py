@@ -286,7 +286,21 @@ def _read_training_metrics(run_name):
 # ── Pages ─────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
-    return render_template("index.html", ls_url=LS_URL, yolo_url=YOLO_URL)
+    return app.send_static_file("index.html")
+
+
+SPA_ROUTES = {
+    "dashboard", "demo", "dataset", "annotator", "import", "training",
+    "models", "api-docs", "projects", "settings", "team",
+}
+
+
+@app.route("/<path:spa_path>")
+def spa_fallback(spa_path):
+    """Serve the React shell for direct opens/refreshes of client routes."""
+    if spa_path.split("/", 1)[0] in SPA_ROUTES:
+        return app.send_static_file("index.html")
+    abort(404)
 
 
 @app.route("/healthz")
@@ -633,10 +647,21 @@ def api_predict_local():
     except ImportError:
         return jsonify({"error": "ultralytics not installed on webapp server"})
 
-    f = request.files.get("image")
+    f = request.files.get("image") or request.files.get("file")
     if not f:
         return jsonify({"error": "No image uploaded"})
-    conf = float(request.form.get("conf", "0.25"))
+    try:
+        conf = float(request.form.get("conf", "0.25"))
+    except (TypeError, ValueError):
+        conf = 0.25
+    try:
+        iou = float(request.form.get("iou", "0.45"))
+    except (TypeError, ValueError):
+        iou = 0.45
+    try:
+        imgsz = int(request.form.get("imgsz", "640"))
+    except (TypeError, ValueError):
+        imgsz = 640
     model_path = request.form.get("model", str(MODEL_DIR / "best.pt"))
 
     import tempfile, cv2, numpy as np
@@ -647,24 +672,29 @@ def api_predict_local():
         return jsonify({"error": "Cannot decode image"})
 
     model = YOLO(model_path)
-    results = model.predict(source=img, conf=conf, verbose=False)
+    results = model.predict(source=img, conf=conf, iou=iou, imgsz=imgsz, verbose=False)
     id_to_name = _load_class_name_map()
     detections = []
+    h, w = 0, 0
     for r in results:
         h, w = r.orig_shape
         for box in r.boxes:
             x1, y1, x2, y2 = box.xyxy[0].tolist()
             cls_id = int(box.cls[0])
             raw_name = r.names.get(cls_id, str(cls_id))
+            class_name = _remap_class_name(cls_id, raw_name, id_to_name)
             detections.append({
                 "class_id": cls_id,
-                "class_name": _remap_class_name(cls_id, raw_name, id_to_name),
+                "class": class_name,
+                "class_name": class_name,
                 "confidence": round(float(box.conf[0]), 4),
                 "bbox": [round(x1), round(y1), round(x2), round(y2)],
             })
     return jsonify({
         "status": "ok", "image_width": w, "image_height": h,
-        "detections": detections, "count": len(detections),
+        "detections": detections, "results": detections, "count": len(detections),
+        "model": model_path,
+        "parameters": {"conf": conf, "iou": iou, "imgsz": imgsz},
     })
 
 

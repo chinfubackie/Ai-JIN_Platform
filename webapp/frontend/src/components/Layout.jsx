@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
-  BarChart3, Search, Images, PenTool, Upload,
+  Search, Images, PenTool, Upload,
   Brain, Package, ChevronLeft, Menu,
   Home, Rocket, Settings, Users, Bell,
   FolderOpen, ChevronDown, ChevronRight,
@@ -29,7 +29,7 @@ const TOP_TABS = [
   { to: '/dashboard', label: 'Home' },
   { to: '/annotator', label: 'Annotate' },
   { to: '/training', label: 'Train' },
-  { to: '/demo', label: 'Demo' },
+  { to: '/demo', label: 'Inference' },
   { to: '/models', label: 'Models' },
   { to: '/import', label: 'Import' },
   { to: '/api-docs', label: 'API Docs' },
@@ -42,7 +42,7 @@ const SIDEBAR_NAV = [
   { to: '/dataset', icon: Images, label: 'Datasets' },
   { to: '/annotator', icon: PenTool, label: 'Annotate' },
   { to: '/training', icon: Brain, label: 'Train' },
-  { to: '/demo', icon: PlayCircle, label: 'Demo' },
+  { to: '/demo', icon: PlayCircle, label: 'Inference' },
   { to: '/models', icon: Package, label: 'Models' },
   { to: '/import', icon: Upload, label: 'Import' },
   { to: '/api-docs', icon: BookOpen, label: 'API Docs' },
@@ -72,10 +72,11 @@ const PROJECT_TREE = [
     ],
   },
   {
-    label: 'Deploy',
+    label: 'Inference',
     icon: Rocket,
     children: [
-      { label: 'API v2.1 - Active', to: '/models' },
+      { label: 'Run active model', to: '/demo' },
+      { label: 'API v2.1 - Active', to: '/api-docs' },
     ],
   },
 ]
@@ -148,7 +149,7 @@ export default function Layout() {
   const notifications = [
     { title: 'Dataset sync พร้อมใช้งาน', detail: 'เปิดหน้า Import เพื่อเพิ่มข้อมูลใหม่' },
     { title: 'Training queue ว่าง', detail: 'เริ่มเทรนโมเดลได้จากหน้า Train' },
-    { title: 'Model registry พร้อม deploy', detail: 'จัดการโมเดลได้จากหน้า Models' },
+    { title: 'Inference API พร้อมใช้', detail: 'ทดสอบโมเดลจริงได้จากหน้า Inference' },
   ]
 
   function showNotice(message) {

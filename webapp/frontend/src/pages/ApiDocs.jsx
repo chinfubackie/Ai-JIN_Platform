@@ -28,7 +28,7 @@ print(f"คลาส: {data['classes']}")`,
 
 # ตรวจจับวัตถุจาก URL
 response = requests.post(
-    "http://localhost:8000/api/predict",
+    "http://localhost:8501/api/predict",
     data={"url": "https://example.com/image.jpg"},
 )
 results = response.json()
@@ -40,8 +40,9 @@ for det in results.get("detections", []):
 # ตรวจจับวัตถุจากไฟล์
 with open("image.jpg", "rb") as f:
     response = requests.post(
-        "http://localhost:8000/api/predict/local",
+        "http://localhost:8501/api/predict/local",
         files={"file": f},
+        data={"model": "D:/Ai-JIN_Platform/models/best.pt", "conf": 0.25},
     )
 results = response.json()
 print(results)`,
@@ -49,7 +50,7 @@ print(results)`,
     '/api/models': `import requests
 
 # ดึงรายการโมเดล
-response = requests.get("http://localhost:8000/api/models")
+response = requests.get("http://localhost:8501/api/models")
 models = response.json()
 for model in models:
     status = "ใช้งาน" if model["active"] else "พร้อม"
@@ -59,8 +60,8 @@ for model in models:
 
 # ติดตั้งโมเดล
 response = requests.post(
-    "http://localhost:8000/api/models/deploy",
-    json={"model_path": "/models/best.pt"},
+    "http://localhost:8501/api/models/deploy",
+    json={"source": "D:/Ai-JIN_Platform/models/best.pt"},
 )
 print(response.json())`,
 
@@ -109,20 +110,24 @@ print(f"จำนวนภาพ: {len(data)}")`,
 curl -X GET http://localhost:8000/api/stats`,
 
     '/api/predict': `# ตรวจจับวัตถุจาก URL
-curl -X POST http://localhost:8000/api/predict \\
+curl -X POST http://localhost:8501/api/predict \\
   -F "url=https://example.com/image.jpg"`,
 
     '/api/predict/local': `# ตรวจจับวัตถุจากไฟล์
-curl -X POST http://localhost:8000/api/predict/local \\
-  -F "file=@image.jpg"`,
+curl -X POST http://localhost:8501/api/predict/local \\
+  -F "file=@image.jpg" \\
+  -F "model=D:/Ai-JIN_Platform/models/best.pt" \\
+  -F "conf=0.25" \\
+  -F "iou=0.45" \\
+  -F "imgsz=640"`,
 
     '/api/models': `# ดึงรายการโมเดล
-curl -X GET http://localhost:8000/api/models`,
+curl -X GET http://localhost:8501/api/models`,
 
     '/api/models/deploy': `# ติดตั้งโมเดล
-curl -X POST http://localhost:8000/api/models/deploy \\
+curl -X POST http://localhost:8501/api/models/deploy \\
   -H "Content-Type: application/json" \\
-  -d '{"model_path": "/models/best.pt"}'`,
+  -d '{"source": "D:/Ai-JIN_Platform/models/best.pt"}'`,
 
     '/api/train/start': `# เริ่มเทรนโมเดล
 curl -X POST http://localhost:8000/api/train/start \\
@@ -161,6 +166,8 @@ console.log(results);`,
 const input = document.querySelector("input[type=file]");
 const formData = new FormData();
 formData.append("file", input.files[0]);
+formData.append("model", "D:/Ai-JIN_Platform/models/best.pt");
+formData.append("conf", "0.25");
 
 const response = await fetch("/api/predict/local", {
   method: "POST",
@@ -180,7 +187,7 @@ models.forEach(m => {
 const response = await fetch("/api/models/deploy", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ model_path: "/models/best.pt" }),
+  body: JSON.stringify({ source: "D:/Ai-JIN_Platform/models/best.pt" }),
 });
 const result = await response.json();
 console.log(result);`,
