@@ -1,10 +1,10 @@
-import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
   BarChart3, Search, Images, PenTool, Upload,
-  Brain, Package, Zap, ChevronLeft, Menu,
+  Brain, Package, ChevronLeft, Menu,
   Home, Rocket, Settings, Users, Bell,
   FolderOpen, ChevronDown, ChevronRight,
-  Sun, Moon, CreditCard,
+  Sun, Moon, CreditCard, BookOpen, PlayCircle,
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import './Layout.css'
@@ -29,9 +29,10 @@ const TOP_TABS = [
   { to: '/dashboard', label: 'Home' },
   { to: '/annotator', label: 'Annotate' },
   { to: '/training', label: 'Train' },
-  { to: '/demo', label: 'Deploy' },
+  { to: '/demo', label: 'Demo' },
   { to: '/models', label: 'Models' },
-  { to: '/api-docs', label: 'Analytics' },
+  { to: '/import', label: 'Import' },
+  { to: '/api-docs', label: 'API Docs' },
 ]
 
 /* ---- Sidebar nav items ---- */
@@ -41,10 +42,10 @@ const SIDEBAR_NAV = [
   { to: '/dataset', icon: Images, label: 'Datasets' },
   { to: '/annotator', icon: PenTool, label: 'Annotate' },
   { to: '/training', icon: Brain, label: 'Train' },
-  { to: '/demo', icon: Rocket, label: 'Deploy' },
+  { to: '/demo', icon: PlayCircle, label: 'Demo' },
   { to: '/models', icon: Package, label: 'Models' },
-  { to: '/api-docs', icon: BarChart3, label: 'Analytics' },
   { to: '/import', icon: Upload, label: 'Import' },
+  { to: '/api-docs', icon: BookOpen, label: 'API Docs' },
 ]
 
 const SIDEBAR_BOTTOM_NAV = [
@@ -105,7 +106,7 @@ function TreeNode({ item, collapsed: sidebarCollapsed }) {
 }
 
 /* ---- User dropdown ---- */
-function UserDropdown({ show, onClose }) {
+function UserDropdown({ show, onClose, onNavigate, onToggleTheme, onSignOut }) {
   const ref = useRef(null)
   useEffect(() => {
     if (!show) return
@@ -127,10 +128,10 @@ function UserDropdown({ show, onClose }) {
         </div>
       </div>
       <div className="dropdown-divider" />
-      <button className="dropdown-item">Profile</button>
-      <button className="dropdown-item">Preferences</button>
+      <button className="dropdown-item" onClick={() => { onNavigate('/settings'); onClose() }}>Profile</button>
+      <button className="dropdown-item" onClick={() => { onToggleTheme(); onClose() }}>Preferences</button>
       <div className="dropdown-divider" />
-      <button className="dropdown-item dropdown-item-danger">Sign Out</button>
+      <button className="dropdown-item dropdown-item-danger" onClick={onSignOut}>Sign Out</button>
     </div>
   )
 }
@@ -140,8 +141,26 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const location = useLocation()
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notice, setNotice] = useState('')
   const navigate = useNavigate()
+
+  const notifications = [
+    { title: 'Dataset sync พร้อมใช้งาน', detail: 'เปิดหน้า Import เพื่อเพิ่มข้อมูลใหม่' },
+    { title: 'Training queue ว่าง', detail: 'เริ่มเทรนโมเดลได้จากหน้า Train' },
+    { title: 'Model registry พร้อม deploy', detail: 'จัดการโมเดลได้จากหน้า Models' },
+  ]
+
+  function showNotice(message) {
+    setNotice(message)
+    setTimeout(() => setNotice(''), 2200)
+  }
+
+  function go(to) {
+    navigate(to)
+    setShowNotifications(false)
+    setShowUserMenu(false)
+  }
 
   return (
     <div className={`app-layout ${collapsed ? 'sidebar-collapsed' : ''} ${darkMode ? 'dark' : 'light'}`}>
@@ -166,11 +185,33 @@ export default function Layout() {
         </nav>
 
         <div className="topbar-right">
-          <button className="topbar-icon-btn" title="Notifications">
+          <button
+            className="topbar-icon-btn"
+            title="Notifications"
+            onClick={() => setShowNotifications(v => !v)}
+          >
             <Bell size={18} />
             <span className="notif-badge">3</span>
           </button>
-          <button className="topbar-icon-btn" title="Settings" onClick={() => navigate('/settings')}>
+          {showNotifications && (
+            <div className="notifications-popover">
+              <div className="notifications-title">Notifications</div>
+              {notifications.map((item) => (
+                <button
+                  key={item.title}
+                  className="notification-item"
+                  onClick={() => go('/import')}
+                >
+                  <span className="notification-dot" />
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>{item.detail}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button className="topbar-icon-btn" title="Settings" onClick={() => go('/settings')}>
             <Settings size={18} />
           </button>
           <div className="topbar-user-wrap">
@@ -180,7 +221,13 @@ export default function Layout() {
             >
               OT
             </button>
-            <UserDropdown show={showUserMenu} onClose={() => setShowUserMenu(false)} />
+            <UserDropdown
+              show={showUserMenu}
+              onClose={() => setShowUserMenu(false)}
+              onNavigate={go}
+              onToggleTheme={() => setDarkMode(d => !d)}
+              onSignOut={() => { setShowUserMenu(false); showNotice('Signed out locally') }}
+            />
           </div>
         </div>
       </header>
@@ -190,15 +237,19 @@ export default function Layout() {
         {/* Search */}
         <div className="sidebar-search-wrap">
           {collapsed ? (
-            <button className="sidebar-search-icon-btn">
+            <button
+              className="sidebar-search-icon-btn"
+              title="Expand search"
+              onClick={() => setCollapsed(false)}
+            >
               <Search size={18} />
             </button>
           ) : (
-            <div className="sidebar-search">
+            <button className="sidebar-search" onClick={() => go('/api-docs')}>
               <Search size={15} className="search-icon" />
-              <input type="text" placeholder="Search..." readOnly />
+              <span className="sidebar-search-text">Search...</span>
               <kbd className="search-kbd">&#8984;K</kbd>
-            </div>
+            </button>
           )}
         </div>
 
@@ -283,6 +334,7 @@ export default function Layout() {
       <main className="main-content">
         <Outlet />
       </main>
+      {notice && <div className="layout-toast">{notice}</div>}
     </div>
   )
 }

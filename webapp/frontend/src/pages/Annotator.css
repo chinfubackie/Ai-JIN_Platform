@@ -19,18 +19,25 @@
   border-radius: var(--radius);
   margin-bottom: 8px;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 .ann-topbar-left,
 .ann-topbar-right {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 .ann-topbar .divider {
   width: 1px;
   height: 22px;
   background: var(--border);
   margin: 0 4px;
+  flex-shrink: 0;
 }
 
 /* ── Main 3-column layout ── */
