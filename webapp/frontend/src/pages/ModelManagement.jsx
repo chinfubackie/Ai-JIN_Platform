@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { ShieldCheck, Upload, Trash2, Rocket, Download, Package } from 'lucide-react'
 import './ModelManagement.css'
@@ -28,32 +28,33 @@ export default function ModelManagement() {
   const [exportFormat, setExportFormat] = useState('onnx')
   const [exporting, setExporting] = useState(false)
 
-  const loadModels = () => {
+  function showToast(msg, type = 'success') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const exportModelRef = useRef(exportModel)
+  exportModelRef.current = exportModel
+
+  const loadModels = useCallback(() => {
     setLoading(true)
-    // Load DB registry first, merge with file scan
     Promise.allSettled([api.registry(), api.models()])
       .then(([regRes, scanRes]) => {
         const registry = regRes.status === 'fulfilled' ? (regRes.value || []) : []
         const scanned  = scanRes.status === 'fulfilled'
           ? (scanRes.value?.models || scanRes.value || [])
           : []
-        // Prefer DB registry; fall back to file scan if registry empty
         const data = registry.length ? registry : scanned
         setModels(Array.isArray(data) ? data : [])
-        if (data?.length && !exportModel) {
+        if (data?.length && !exportModelRef.current) {
           setExportModel(data[0].path || data[0].best_pt || data[0].name)
         }
       })
       .catch(() => showToast('โหลดรายการโมเดลไม่สำเร็จ', 'error'))
       .finally(() => setLoading(false))
-  }
+  }, [])
 
-  useEffect(() => { loadModels() }, [])
-
-  function showToast(msg, type = 'success') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
-  }
+  useEffect(() => { loadModels() }, [loadModels])
 
   async function handleDeploy(model) {
     const key = model.id || model.path
