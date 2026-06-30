@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
-import { Save, RotateCcw, Server, Database, Cpu, FolderOpen } from 'lucide-react'
+import { Save, RotateCcw, Server, Database, Cpu, FolderOpen, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import './Settings.css'
 
 const DEFAULT_SETTINGS = {
@@ -31,6 +31,7 @@ export default function Settings() {
   const [datasetDir, setDatasetDir] = useState('')
   const [syncMsg, setSyncMsg] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [sam3Status, setSam3Status] = useState(null)
 
   useEffect(() => {
     api.projects().then(data => {
@@ -41,6 +42,9 @@ export default function Settings() {
       setForm(f => ({ ...f, ...cfg }))
       localStorage.setItem(LS_KEY, JSON.stringify({ ...loadSettings(), ...cfg }))
     }).catch(() => {})
+    api.sam3Status().then(setSam3Status).catch(() => {
+      setSam3Status({ available: false, model_exists: false })
+    })
   }, [])
 
   function set(key, val) {
@@ -129,7 +133,19 @@ export default function Settings() {
               <option value="sam2_s.pt">SAM2 Small</option>
               <option value="sam2_l.pt">SAM2 Large</option>
               <option value="sam_b.pt">SAM Base (v1)</option>
+              <option value="sam3">SAM 3 Concept (sam3.pt)</option>
             </select>
+          </div>
+          <div className={`settings-sam3-status ${sam3Status?.available ? 'ok' : 'warn'}`}>
+            {sam3Status?.available ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+            <span>
+              {sam3Status?.available
+                ? 'SAM3 พร้อมใช้งานสำหรับ text prompts และ box exemplars'
+                : `SAM3 ยังไม่พร้อม${sam3Status?.model_path ? ` · ${sam3Status.model_path}` : ''}`}
+            </span>
+          </div>
+          <div className="settings-hint">
+            SAM3 ใช้ <code>SAM3SemanticPredictor</code> พร้อม <code>quantize=16</code> และ reuse image features ต่อภาพใน Annotator
           </div>
         </section>
 

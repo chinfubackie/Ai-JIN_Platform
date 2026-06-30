@@ -528,6 +528,42 @@ export default function Annotator() {
     showToast('เพิ่ม SAM polygon สำเร็จ')
   }
 
+  function selectedBoxToSam3Bbox() {
+    if (selected?.type !== 'box') return null
+    const box = boxes[selected.idx]
+    if (!box) return null
+    const [, cx, cy, bw, bh] = box
+    const iw = imgNat.current.w, ih = imgNat.current.h
+    return [
+      (cx - bw / 2) * iw,
+      (cy - bh / 2) * ih,
+      (cx + bw / 2) * iw,
+      (cy + bh / 2) * ih,
+    ].map(v => Math.round(v * 100) / 100)
+  }
+
+  function addSam3Results(res, fallbackNames) {
+    if (!res.boxes?.length) {
+      showToast('SAM3 ไม่พบวัตถุตาม prompt', 'error')
+      return
+    }
+    const iw = imgNat.current.w, ih = imgNat.current.h
+    pushHistory([...boxes], [...polygons])
+    const upd = [...classes]
+    const newBoxes = res.boxes.map((bbox, idx) => {
+      const name = res.labels?.[idx] || fallbackNames[idx % fallbackNames.length] || 'concept'
+      let cid = upd.indexOf(name)
+      if (cid < 0) { upd.push(name); cid = upd.length - 1 }
+      const [x1, y1, x2, y2] = bbox
+      const cx = (x1 + x2) / (2 * iw), cy = (y1 + y2) / (2 * ih)
+      const bw = (x2 - x1) / iw, bh = (y2 - y1) / ih
+      return [cid, cx, cy, bw, bh]
+    })
+    setClasses(upd)
+    setBoxes(prev => [...prev, ...newBoxes])
+    showToast(`SAM3: พบ ${newBoxes.length} วัตถุ`)
+  }
+
   async function segmentByConcept() {
     if (!currentImage || !imgRef.current || samLoading) return
     const prompts = sam3ConceptText.split(',').map(s => s.trim()).filter(Boolean)
@@ -546,28 +582,36 @@ export default function Annotator() {
         showToast(`${res.error}${res.hint ? ` ${res.hint}` : ''}`, 'error')
         return
       }
-      if (!res.boxes?.length) {
-        showToast('SAM3 ไม่พบวัตถุตาม concept', 'error')
-        return
-      }
-
-      const iw = imgNat.current.w, ih = imgNat.current.h
-      pushHistory([...boxes], [...polygons])
-      const upd = [...classes]
-      const newBoxes = res.boxes.map((bbox, idx) => {
-        const name = res.labels?.[idx] || prompts[idx % prompts.length] || 'concept'
-        let cid = upd.indexOf(name)
-        if (cid < 0) { upd.push(name); cid = upd.length - 1 }
-        const [x1, y1, x2, y2] = bbox
-        const cx = (x1 + x2) / (2 * iw), cy = (y1 + y2) / (2 * ih)
-        const bw = (x2 - x1) / iw, bh = (y2 - y1) / ih
-        return [cid, cx, cy, bw, bh]
-      })
-      setClasses(upd)
-      setBoxes(prev => [...prev, ...newBoxes])
-      showToast(`SAM3: พบ ${newBoxes.length} วัตถุ`)
+      addSam3Results(res, prompts)
     } catch (err) {
       showToast('SAM3 ล้มเหลว: ' + err.message, 'error')
+    } finally {
+      setSamLoading(false)
+    }
+  }
+
+  async function segmentBySelectedBox() {
+    if (!currentImage || !imgRef.current || samLoading) return
+    const bbox = selectedBoxToSam3Bbox()
+    if (!bbox) {
+      showToast('เลือก box ตัวอย่างก่อน', 'error')
+      return
+    }
+    setSamLoading(true)
+    try {
+      const selectedClass = classes[boxes[selected.idx]?.[0]] || 'exemplar'
+      const res = await api.sam3Predict({
+        image_path: currentImage,
+        bboxes: [bbox],
+        conf: 0.25,
+      })
+      if (res.error) {
+        showToast(`${res.error}${res.hint ? ` ${res.hint}` : ''}`, 'error')
+        return
+      }
+      addSam3Results(res, [selectedClass])
+    } catch (err) {
+      showToast('SAM3 exemplar ล้มเหลว: ' + err.message, 'error')
     } finally {
       setSamLoading(false)
     }
@@ -887,6 +931,16 @@ export default function Annotator() {
                   >
                     {samLoading ? <><span className="ann-spinner-inline" /> SAM3...</> : <><Sparkles size={14} /> Segment by Concept</>}
                   </button>
+                  <button
+                    className="ann-sam3-button secondary"
+                    onClick={segmentBySelectedBox}
+                    disabled={!currentImage || samLoading || selected?.type !== 'box'}
+                  >
+                    <Square size={14} /> Segment Similar to Box
+                  </button>
+                  <div className="ann-sam3-help">
+                    เลือก box หนึ่งอันเพื่อใช้เป็น visual exemplar แล้วค้นหาวัตถุที่คล้ายกัน
+                  </div>
                 </div>
               )}
             </div>

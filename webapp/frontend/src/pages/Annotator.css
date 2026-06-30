@@ -234,9 +234,19 @@
   cursor: pointer;
 }
 .ann-sam3-button:hover:not(:disabled) { filter: brightness(1.12); }
+.ann-sam3-button.secondary {
+  background: transparent;
+  color: #c4b5fd;
+  border: 1px solid rgba(168,85,247,0.42);
+}
 .ann-sam3-button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+.ann-sam3-help {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  line-height: 1.4;
 }
 
 /* SAM preview confirm panel */

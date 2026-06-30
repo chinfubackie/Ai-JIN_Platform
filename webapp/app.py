@@ -191,6 +191,24 @@ def _json_float_list(values):
     return [round(float(v), 5) for v in values]
 
 
+def _normalize_sam3_bboxes(raw_bboxes):
+    if not raw_bboxes:
+        return []
+    if isinstance(raw_bboxes, (list, tuple)) and len(raw_bboxes) == 4 and all(
+        isinstance(v, (int, float)) for v in raw_bboxes
+    ):
+        raw_bboxes = [raw_bboxes]
+    bboxes = []
+    for bbox in raw_bboxes:
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            continue
+        try:
+            bboxes.append([float(v) for v in bbox])
+        except (TypeError, ValueError):
+            continue
+    return bboxes
+
+
 def _serialize_sam3_results(results, text_prompts):
     masks, boxes, labels = [], [], []
     for result in results or []:
@@ -1333,8 +1351,9 @@ def api_sam3_predict():
     if isinstance(text_prompts, str):
         text_prompts = [text_prompts]
     text_prompts = [str(t).strip() for t in text_prompts if str(t).strip()]
-    if not text_prompts:
-        return jsonify({"error": "text prompts required"}), 400
+    bboxes = _normalize_sam3_bboxes(data.get("bboxes") or data.get("bbox"))
+    if not text_prompts and not bboxes:
+        return jsonify({"error": "text prompts or bboxes required"}), 400
 
     try:
         conf = float(data.get("conf", 0.25))
@@ -1369,6 +1388,7 @@ def api_sam3_predict():
             task="segment",
             mode="predict",
             model=str(sam3_path),
+            quantize=16,
             verbose=False,
         )
         try:
@@ -1385,7 +1405,10 @@ def api_sam3_predict():
     try:
         if hasattr(predictor, "args"):
             predictor.args.conf = conf
-        results = predictor(text=text_prompts)
+        if text_prompts:
+            results = predictor(text=text_prompts)
+        else:
+            results = predictor(bboxes=bboxes)
     except Exception as e:
         return jsonify({"error": f"SAM3: {e}"}), 500
 
