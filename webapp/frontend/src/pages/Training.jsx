@@ -14,6 +14,26 @@ const BASE_MODELS = [
 
 const EXPORT_FORMATS = ['onnx', 'torchscript', 'tflite', 'coreml']
 
+function modelPath(model) {
+  return model?.path || model?.best_pt || model?.deployed_model || ''
+}
+
+function modelLabel(model) {
+  return model?.run_name || model?.run || model?.name || modelPath(model)
+}
+
+function mergeModels(...groups) {
+  const merged = []
+  const seen = new Set()
+  groups.flat().filter(Boolean).forEach(model => {
+    const key = modelPath(model) || model?.id || model?.run_name || model?.name
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    merged.push(model)
+  })
+  return merged
+}
+
 function formatBytes(bytes) {
   if (!bytes) return '-'
   if (bytes < 1024) return bytes + ' B'
@@ -84,14 +104,21 @@ export default function Training() {
   useEffect(() => {
     api.trainStatus().then(setStatus).catch(() => {})
     api.projects().then(data => setProjects(Array.isArray(data) ? data : [])).catch(() => {})
-    // Load from DB runs first, fall back to file scan
-    api.runs().then(dbRuns => {
-      if (dbRuns?.length) setModels(dbRuns)
-      else api.models().then(d => setModels(d?.models || d || [])).catch(() => {})
-    }).catch(() => {
-      api.models().then(d => setModels(d?.models || d || [])).catch(() => {})
+    Promise.allSettled([api.runs(), api.models()]).then(results => {
+      const dbRuns = results[0].status === 'fulfilled' && Array.isArray(results[0].value) ? results[0].value : []
+      const scanned = results[1].status === 'fulfilled' ? (results[1].value?.models || results[1].value || []) : []
+      setModels(mergeModels(dbRuns, scanned))
     })
   }, [])
+
+  const localModelOptions = models
+    .map(m => ({ value: modelPath(m), label: modelLabel(m) }))
+    .filter(m => m.value)
+
+  useEffect(() => {
+    if (!localModelOptions.length || config.model !== 'yolov8n.pt') return
+    setConfig(c => ({ ...c, model: localModelOptions[0].value }))
+  }, [config.model, localModelOptions])
 
   // Poll during training
   const startPolling = useCallback(() => {
@@ -175,10 +202,13 @@ export default function Training() {
     }
   }
 
-  const isTraining = status?.status === 'training'
-  const isCompleted = status?.status === 'completed'
-  const isError = status?.status === 'error'
+  const statusState = status?.state || status?.status || 'idle'
+  const isTraining = statusState === 'training'
+  const isCompleted = ['completed', 'done'].includes(statusState)
+  const isError = statusState === 'error'
+  const isOffline = statusState === 'offline'
   const progress = status?.progress ?? 0
+  const runnerLabel = status?.runner ? ` (${status.runner})` : ''
 
   return (
     <div>
@@ -361,6 +391,13 @@ export default function Training() {
                 {BASE_MODELS.map(m => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
+                {localModelOptions.length > 0 && (
+                  <optgroup label="โมเดลในเครื่อง">
+                    {localModelOptions.map(m => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 
@@ -431,12 +468,14 @@ export default function Training() {
               <div className="progress-status">
                 {isTraining && <span className="train-spinner" />}
                 <span className={
-                  `badge ${isTraining ? 'badge-yellow' : isCompleted ? 'badge-green' : isError ? 'badge-red' : ''}`
+                  `badge ${isTraining ? 'badge-yellow' : isCompleted ? 'badge-green' : (isError || isOffline) ? 'badge-red' : ''}`
                 }>
                   {isTraining ? 'กำลังเทรน'
                     : isCompleted ? 'เสร็จสิ้น'
                     : isError ? 'ผิดพลาด'
+                    : isOffline ? 'ออฟไลน์'
                     : 'ว่าง'}
+                  {runnerLabel}
                 </span>
               </div>
             </div>
@@ -487,6 +526,12 @@ export default function Training() {
                       : '-'}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {status?.remote_status === 'offline' && status?.runner === 'local' && (
+              <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 10 }}>
+                Remote training server offline; using local Ultralytics runner.
               </div>
             )}
           </div>

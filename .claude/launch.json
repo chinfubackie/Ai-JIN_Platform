@@ -2,13 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Ai-JIN Platform API",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["webapp/app.py"],
-      "port": 8501,
-      "autoPort": false
-    },
-    {
       "name": "Frontend Dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],

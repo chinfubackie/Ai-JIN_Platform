@@ -9,6 +9,8 @@ import time
 import base64
 import csv
 import shutil
+import threading
+import traceback
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -35,6 +37,14 @@ SAM3_INSTALL_HINT = (
 # Runtime-mutable config (can be updated via POST /api/config without restart)
 _runtime_cfg = {}
 _sam3_predictor_cache = {}
+_local_train_lock = threading.Lock()
+_local_train_state = {
+    "status": "idle",
+    "state": "idle",
+    "runner": "local",
+    "progress": 0,
+    "log": "",
+}
 
 
 def _safe_path(base, user_path):
@@ -281,6 +291,155 @@ def _read_training_metrics(run_name):
         }
     except Exception as e:
         return {"run_name": run_name, "run_dir": str(run_dir), "metrics_error": str(e)}
+
+
+def _local_train_snapshot(remote_status=None):
+    with _local_train_lock:
+        snapshot = dict(_local_train_state)
+    snapshot["runner"] = "local"
+    if remote_status:
+        snapshot["remote_status"] = remote_status
+    return snapshot
+
+
+def _set_local_train_state(**updates):
+    with _local_train_lock:
+        _local_train_state.update(updates)
+        _local_train_state["runner"] = "local"
+        return dict(_local_train_state)
+
+
+def _resolve_training_data_path(data_ref):
+    data_ref = data_ref or "/dataset/auto_improve/data.yaml"
+    normalized = str(data_ref).replace("\\", "/")
+    if normalized.startswith("/dataset/"):
+        candidate = DATASET / normalized[len("/dataset/"):]
+    else:
+        candidate = Path(data_ref)
+        if not candidate.is_absolute():
+            candidate = DATASET / candidate
+    candidate = candidate.resolve()
+    if not candidate.exists() or not candidate.is_file():
+        raise FileNotFoundError(f"training data yaml not found: {candidate}")
+    return candidate
+
+
+def _resolve_training_model(model_ref):
+    model_ref = model_ref or "yolov8n.pt"
+    candidate = Path(str(model_ref))
+    if candidate.is_absolute() and candidate.exists():
+        return str(candidate)
+    if candidate.exists():
+        return str(candidate.resolve())
+    model_candidate = MODEL_DIR / str(model_ref)
+    if model_candidate.exists():
+        return str(model_candidate.resolve())
+    return str(model_ref)
+
+
+def _training_metrics_payload(run_name, epochs=None):
+    metrics = _read_training_metrics(run_name)
+    payload = dict(metrics)
+    if metrics:
+        payload["metrics"] = {
+            "loss": metrics.get("loss"),
+            "mAP50": metrics.get("mAP50"),
+            "mAP50_95": metrics.get("mAP50_95"),
+        }
+        if metrics.get("epoch") and epochs:
+            payload["total_epochs"] = epochs
+            payload["progress"] = min(100, int((metrics["epoch"] / epochs) * 100))
+    return payload
+
+
+def _start_local_training(config):
+    with _local_train_lock:
+        if _local_train_state.get("status") == "training":
+            return {"ok": False, "runner": "local", "error": "training already running"}
+
+    try:
+        from ultralytics import YOLO
+    except Exception as e:
+        return {
+            "ok": False,
+            "runner": "local",
+            "error": f"Ultralytics is not installed or cannot be imported: {e}",
+        }
+
+    try:
+        model = _resolve_training_model(config.get("model", "yolov8n.pt"))
+        data_yaml = _resolve_training_data_path(config.get("data"))
+        epochs = int(config.get("epochs", 100))
+        imgsz = int(config.get("imgsz", 640))
+        batch = int(config.get("batch", 16))
+        run_name = config.get("name") or f"train_{time.strftime('%Y%m%d_%H%M')}"
+    except Exception as e:
+        return {"ok": False, "runner": "local", "error": str(e)}
+
+    project_dir = RUNS / "train"
+    run_dir = project_dir / run_name
+    _set_local_train_state(
+        status="training",
+        state="training",
+        progress=1,
+        run_name=run_name,
+        run_dir=str(run_dir),
+        best_pt=None,
+        error=None,
+        started=time.time(),
+        epoch=0,
+        total_epochs=epochs,
+        log=f"Starting local training: model={model}, data={data_yaml}",
+    )
+
+    def worker():
+        try:
+            project_dir.mkdir(parents=True, exist_ok=True)
+            result = YOLO(model).train(
+                data=str(data_yaml),
+                epochs=epochs,
+                imgsz=imgsz,
+                batch=batch,
+                project=str(project_dir),
+                name=run_name,
+                exist_ok=True,
+            )
+            save_dir = Path(getattr(result, "save_dir", run_dir) or run_dir)
+            best_pt = save_dir / "weights" / "best.pt"
+            if not best_pt.exists():
+                best_pt = run_dir / "weights" / "best.pt"
+            if not best_pt.exists():
+                raise FileNotFoundError(f"best.pt not found under {save_dir}")
+
+            MODEL_DIR.mkdir(parents=True, exist_ok=True)
+            deployed = MODEL_DIR / "best.pt"
+            shutil.copy2(best_pt, deployed)
+
+            payload = _training_metrics_payload(run_name, epochs)
+            payload.update({
+                "status": "completed",
+                "state": "completed",
+                "progress": 100,
+                "run_name": run_name,
+                "run_dir": str(save_dir),
+                "best_pt": str(best_pt),
+                "deployed_model": str(deployed),
+                "finished": time.time(),
+                "log": f"Local training completed. Deployed {deployed}",
+            })
+            _set_local_train_state(**payload)
+        except Exception as e:
+            _set_local_train_state(
+                status="error",
+                state="error",
+                progress=0,
+                error=str(e),
+                log=traceback.format_exc(),
+                finished=time.time(),
+            )
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"ok": True, "runner": "local", "status": "training", "run_name": run_name}
 
 
 # ── Pages ─────────────────────────────────────────────────────────────
@@ -747,7 +906,13 @@ def api_ls_token():
 # ── API: Training ────────────────────────────────────────────────────
 @app.route("/api/train/status")
 def api_train_status():
-    return jsonify(yolo_get("/health"))
+    health = yolo_get("/health")
+    remote_status = health.get("status") if isinstance(health, dict) else "offline"
+    if remote_status == "offline":
+        return jsonify(_local_train_snapshot(remote_status="offline"))
+    if isinstance(health, dict):
+        health.setdefault("runner", "remote")
+    return jsonify(health)
 
 
 @app.route("/api/train/stream")
@@ -818,20 +983,28 @@ def api_train_start():
             "name": run_name,
         },
     }
-    result = yolo_post(body)
+    health = yolo_get("/health")
+    remote_status = health.get("status") if isinstance(health, dict) else "offline"
+    if remote_status == "offline":
+        result = _start_local_training(body["config"])
+    else:
+        result = yolo_post(body)
+        if isinstance(result, dict):
+            result.setdefault("runner", "remote")
     # Record in DB
-    try:
-        pid = config.get("project_id")
-        _db.run_create(
-            run_name,
-            project_id=int(pid) if pid else None,
-            model_base=model,
-            epochs=int(config.get("epochs", 100)),
-            batch=int(config.get("batch", 16)),
-            imgsz=int(config.get("imgsz", 640)),
-        )
-    except Exception:
-        pass
+    if not isinstance(result, dict) or not result.get("error"):
+        try:
+            pid = config.get("project_id")
+            _db.run_create(
+                run_name,
+                project_id=int(pid) if pid else None,
+                model_base=model,
+                epochs=int(config.get("epochs", 100)),
+                batch=int(config.get("batch", 16)),
+                imgsz=int(config.get("imgsz", 640)),
+            )
+        except Exception:
+            pass
     return jsonify(result)
 
 
