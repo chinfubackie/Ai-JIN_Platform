@@ -23,7 +23,7 @@ LS_TOKEN = os.getenv("LABEL_STUDIO_TOKEN", "")
 YOLO_URL = os.getenv("YOLO_TRAIN_URL", "http://localhost:8111")
 DATASET = Path(os.getenv("DATASET_PATH", r"D:\Ai-JIN_V10.0_patch_output\dataset"))
 RUNS = Path(os.getenv("RUNS_PATH", r"D:\Ai-JIN_V10.0_patch_output\runs"))
-MODEL_DIR = Path(os.getenv("MODEL_PATH", r"D:\Ai-JIN_V10.0_patch_output\app"))
+MODEL_DIR = Path(os.getenv("MODEL_PATH", r"D:\Ai-JIN_Platform\models"))
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.93:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llava")
@@ -811,12 +811,16 @@ def api_train_val():
 @app.route("/api/models")
 def api_models():
     models = []
+    seen_paths = set()
+
+    # 1. Scan RUNS/train for training outputs
     train_dir = RUNS / "train"
     if train_dir.exists():
         for run in sorted(train_dir.iterdir(), reverse=True):
             best = run / "weights" / "best.pt"
             if not best.exists():
                 continue
+            seen_paths.add(str(best))
             info = {
                 "run": run.name,
                 "best_pt": str(best),
@@ -838,6 +842,23 @@ def api_models():
                         except ValueError:
                             pass
             models.append(info)
+
+    # 2. Scan MODEL_DIR for .pt files (user's model folder)
+    _NON_MODEL = {"botsort.yaml", "byetrack.yaml", "bytetrack.yaml"}
+    if MODEL_DIR.exists():
+        for pt in sorted(MODEL_DIR.glob("*.pt")):
+            if str(pt) in seen_paths:
+                continue
+            seen_paths.add(str(pt))
+            name = pt.stem
+            models.append({
+                "run": name,
+                "name": name,
+                "best_pt": str(pt),
+                "path": str(pt),
+                "best_size_mb": round(pt.stat().st_size / 1e6, 1),
+                "source": "model_dir",
+            })
 
     active_best = MODEL_DIR / "best.pt"
 
@@ -1214,6 +1235,80 @@ def api_generate_yaml():
         "ok": True, "path": str(yaml_path),
         "nc": len(classes), "names": classes,
         "yaml": yaml_content,
+    })
+
+
+@app.route("/api/import/export-ndjson", methods=["POST"])
+def api_export_ndjson():
+    """Create a local NDJSON snapshot from auto_improve YOLO folders."""
+    image_root = DATASET / "auto_improve" / "images"
+    label_root = DATASET / "auto_improve" / "labels"
+    export_dir = DATASET / "auto_improve" / "exports"
+    export_dir.mkdir(parents=True, exist_ok=True)
+
+    classes = set()
+    if image_root.exists():
+        for split in ("train", "val", "test"):
+            split_dir = image_root / split
+            if not split_dir.exists():
+                continue
+            classes.update(p.name for p in split_dir.iterdir() if p.is_dir())
+    classes = sorted(classes)
+    class_to_id = {name: idx for idx, name in enumerate(classes)}
+    export_file = export_dir / f"dataset_{time.strftime('%Y%m%d_%H%M%S')}.ndjson"
+
+    image_count = 0
+    annotation_count = 0
+    with export_file.open("w", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "type": "dataset",
+            "name": "Ai-JIN auto_improve",
+            "task": "detect",
+            "classes": classes,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }, ensure_ascii=False) + "\n")
+
+        for split in ("train", "val", "test"):
+            split_dir = image_root / split
+            if not split_dir.exists():
+                continue
+            for img_path in sorted(p for p in split_dir.rglob("*") if p.suffix.lower() in IMG_EXT):
+                rel_image = img_path.relative_to(DATASET).as_posix()
+                class_name = img_path.parent.name
+                label_file = label_root / split / class_name / f"{img_path.stem}.txt"
+                annotations = []
+                if label_file.exists():
+                    for line in label_file.read_text(encoding="utf-8").splitlines():
+                        parts = line.strip().split()
+                        if len(parts) < 5:
+                            continue
+                        try:
+                            cls_id = int(float(parts[0]))
+                            coords = [float(x) for x in parts[1:]]
+                        except ValueError:
+                            continue
+                        if len(coords) == 4:
+                            annotations.append({"class_id": cls_id, "bbox": coords})
+                        elif len(coords) >= 6 and len(coords) % 2 == 0:
+                            pts = [[coords[i], coords[i + 1]] for i in range(0, len(coords), 2)]
+                            annotations.append({"class_id": cls_id, "polygon": pts})
+                annotation_count += len(annotations)
+                image_count += 1
+                fh.write(json.dumps({
+                    "type": "image",
+                    "split": split,
+                    "path": rel_image,
+                    "class_name": class_name,
+                    "class_id": class_to_id.get(class_name),
+                    "annotations": annotations,
+                }, ensure_ascii=False) + "\n")
+
+    return jsonify({
+        "ok": True,
+        "path": str(export_file),
+        "images": image_count,
+        "annotations": annotation_count,
+        "classes": classes,
     })
 
 
