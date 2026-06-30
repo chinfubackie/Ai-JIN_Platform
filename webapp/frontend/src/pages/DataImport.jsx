@@ -2,11 +2,19 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 import {
   Upload, FolderOpen, Trash2, ArrowRightLeft, FileCode, RefreshCw,
-  X, Check, ChevronLeft, ChevronRight, ImageIcon, Tag, CheckSquare, Square
+  X, Check, ChevronLeft, ChevronRight, ImageIcon, Tag, CheckSquare, Square,
+  BarChart3, Brain, Download, Database, Boxes,
 } from 'lucide-react'
 import './DataImport.css'
 
 const PER_PAGE = 60
+
+const WORKFLOW = [
+  { label: 'Upload', detail: 'Images and YOLO labels', icon: Upload },
+  { label: 'Annotate', detail: 'Manual, YOLO, SAM2, SAM3', icon: Brain },
+  { label: 'Analyze', detail: 'Splits, classes, label counts', icon: BarChart3 },
+  { label: 'Train', detail: 'YAML or NDJSON snapshot', icon: Boxes },
+]
 
 export default function DataImport() {
   // Upload state
@@ -41,6 +49,7 @@ export default function DataImport() {
   // UI
   const [toast, setToast] = useState(null)
   const [yamlMsg, setYamlMsg] = useState('')
+  const [ndjsonMsg, setNdjsonMsg] = useState('')
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderSplit, setNewFolderSplit] = useState('train')
   const [creatingFolder, setCreatingFolder] = useState(false)
@@ -285,6 +294,16 @@ export default function DataImport() {
     }
   }
 
+  const handleExportNdjson = async () => {
+    try {
+      const res = await api.importExportNdjson()
+      setNdjsonMsg(`${res.path} · ${res.images ?? 0} images · ${res.annotations ?? 0} annotations`)
+      showToast('สร้าง NDJSON snapshot สำเร็จ')
+    } catch (err) {
+      showToast(`สร้าง NDJSON ล้มเหลว: ${err.message}`, 'error')
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(totalImages / PER_PAGE))
 
   return (
@@ -294,6 +313,41 @@ export default function DataImport() {
         <button className="btn btn-outline" onClick={refreshAll}>
           <RefreshCw size={14} /> รีเฟรช
         </button>
+      </div>
+
+      <div className="card di-section di-prep-overview">
+        <div className="di-overview-head">
+          <div>
+            <div className="card-title">Data Preparation Workflow</div>
+            <div className="di-overview-sub">
+              เตรียมข้อมูลสำหรับ vision model ตั้งแต่อัปโหลด, annotate, วิเคราะห์ split/class, จนถึง export สำหรับ train
+            </div>
+          </div>
+          <div className="di-uri-pill">
+            <Database size={13} /> ul:// compatible workflow
+          </div>
+        </div>
+        <div className="di-workflow">
+          {WORKFLOW.map((step, idx) => {
+            const Icon = step.icon
+            return (
+              <div className="di-workflow-step" key={step.label}>
+                <div className="di-workflow-icon"><Icon size={16} /></div>
+                <div>
+                  <div className="di-workflow-title">{idx + 1}. {step.label}</div>
+                  <div className="di-workflow-detail">{step.detail}</div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="di-format-row">
+          <span>Images: JPG, PNG, BMP, WEBP</span>
+          <span>Labels: YOLO TXT</span>
+          <span>Imports: Label Studio JSON</span>
+          <span>Exports: YAML, NDJSON</span>
+          <span>Smart labeling: SAM2, SAM3 Concept</span>
+        </div>
       </div>
 
       {/* ---- Split Info ---- */}
@@ -515,6 +569,15 @@ export default function DataImport() {
             <FileCode size={14} /> สร้าง YAML
           </button>
           {yamlMsg && <span className="di-yaml-msg">{yamlMsg}</span>}
+        </div>
+        <div className="di-yaml-section di-export-row">
+          <button className="btn btn-outline" onClick={handleExportNdjson}>
+            <Download size={14} /> Export NDJSON Snapshot
+          </button>
+          {ndjsonMsg && <span className="di-yaml-msg">{ndjsonMsg}</span>}
+        </div>
+        <div className="di-dataset-uri">
+          ใช้ dataset URI เมื่อต้อง train กับ Ultralytics Platform: <code>ul://username/datasets/my-dataset</code>
         </div>
       </div>
 

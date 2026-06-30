@@ -1,4 +1,82 @@
 /* Project selector row */
+.di-prep-overview {
+  margin-top: 0;
+}
+.di-overview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.di-overview-sub {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.di-uri-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  color: var(--cyan);
+  background: rgba(6,182,212,0.1);
+  border: 1px solid rgba(6,182,212,0.24);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.di-workflow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.di-workflow-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+.di-workflow-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  color: var(--accent);
+  background: rgba(99,102,241,0.12);
+  border-radius: 7px;
+}
+.di-workflow-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+.di-workflow-detail {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.di-format-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.di-format-row span {
+  color: var(--text-secondary);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11.5px;
+}
+
 .di-project-row {
   display: flex;
   align-items: center;
@@ -342,9 +420,24 @@
   align-items: center;
   gap: 12px;
 }
+.di-export-row {
+  margin-top: 10px;
+}
 .di-yaml-section .di-yaml-msg {
   font-size: 13px;
   color: var(--green);
+}
+.di-dataset-uri {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.di-dataset-uri code {
+  color: var(--cyan);
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 5px;
 }
 
 .di-ls-result {
@@ -403,6 +496,9 @@
 
 /* Responsive */
 @media (max-width: 900px) {
+  .di-overview-head {
+    flex-direction: column;
+  }
   .di-upload-grid {
     grid-template-columns: 1fr;
   }

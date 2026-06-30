@@ -16,5 +16,6 @@
       "autoPort": true,
       "cwd": "webapp/frontend"
     }
-  ]
+  ],
+  "autoVerify": false
 }

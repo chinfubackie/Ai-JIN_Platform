@@ -72,6 +72,8 @@ export const api = {
     }),
   importGenerateYaml: () =>
     fetchJSON('/import/generate-yaml', { method: 'POST' }),
+  importExportNdjson: () =>
+    fetchJSON('/import/export-ndjson', { method: 'POST' }),
 
   // SAM segmentation
   samPredict: (formData) =>

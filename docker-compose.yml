@@ -57,9 +57,6 @@ services:
       dockerfile: Dockerfile
     container_name: aijin-webapp
     restart: unless-stopped
-    depends_on:
-      label-studio:
-        condition: service_healthy
     environment:
       LABEL_STUDIO_URL: http://label-studio:8085
       LABEL_STUDIO_TOKEN: ${LABEL_STUDIO_TOKEN:-}
