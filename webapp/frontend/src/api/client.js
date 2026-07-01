@@ -77,6 +77,19 @@ export const api = {
   importExportNdjson: () =>
     fetchJSON('/import/export-ndjson', { method: 'POST' }),
 
+  // Auto-label
+  autolabelBatch: (data) =>
+    fetchJSON('/autolabel/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  videoAutolabelStart: (formData) =>
+    fetchJSON('/video/autolabel/start', { method: 'POST', body: formData }),
+  videoAutolabelStatus: () => fetchJSON('/video/autolabel/status'),
+  videoAutolabelCancel: () =>
+    fetchJSON('/video/autolabel/cancel', { method: 'POST' }),
+
   // SAM segmentation
   samPredict: (formData) =>
     fetchJSON('/sam/predict', { method: 'POST', body: formData }),

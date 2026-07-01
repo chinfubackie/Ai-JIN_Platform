@@ -3,11 +3,12 @@ import { api } from '../api/client'
 import {
   Upload, FolderOpen, Trash2, ArrowRightLeft, FileCode, RefreshCw,
   X, Check, ChevronLeft, ChevronRight, ImageIcon, Tag, CheckSquare, Square,
-  BarChart3, Brain, Download, Database, Boxes,
+  BarChart3, Brain, Download, Database, Boxes, Video, StopCircle, Zap,
 } from 'lucide-react'
 import './DataImport.css'
 
 const PER_PAGE = 60
+const MAX_IMPORT_BATCH = 1500
 
 const WORKFLOW = [
   { label: 'Upload', detail: 'Images and YOLO labels', icon: Upload },
@@ -45,6 +46,21 @@ export default function DataImport() {
 
   // Split info
   const [splitInfo, setSplitInfo] = useState(null)
+
+  // Video auto-label state
+  const [videoFile, setVideoFile] = useState(null)
+  const [videoDragOver, setVideoDragOver] = useState(false)
+  const [videoModels, setVideoModels] = useState([])
+  const [videoModel, setVideoModel] = useState('')
+  const [videoClassName, setVideoClassName] = useState('')
+  const [videoSplit, setVideoSplit] = useState('train')
+  const [videoEveryN, setVideoEveryN] = useState(10)
+  const [videoConf, setVideoConf] = useState(0.25)
+  const [videoMaxFrames, setVideoMaxFrames] = useState(0)
+  const [videoStatus, setVideoStatus] = useState(null)
+  const [videoStarting, setVideoStarting] = useState(false)
+  const videoFileInputRef = useRef(null)
+  const videoPollRef = useRef(null)
 
   // UI
   const [toast, setToast] = useState(null)
@@ -88,7 +104,35 @@ export default function DataImport() {
     loadSplitInfo()
     loadFolders()
     api.projects().then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {})
+    api.models().then(data => {
+      const list = Array.isArray(data) ? data : data.models || data.registry || []
+      setVideoModels(list)
+      const deployed = data?.active?.active_model
+      if (deployed) setVideoModel(deployed)
+      else if (list.length > 0) setVideoModel(list[0].path || list[0].best_pt || list[0].name || '')
+    }).catch(() => setVideoModels([]))
   }, [loadClasses, loadSplitInfo, loadFolders])
+
+  // --- Video auto-label: poll status while running ---
+  useEffect(() => {
+    api.videoAutolabelStatus().then(setVideoStatus).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (videoStatus?.status !== 'running') {
+      if (videoPollRef.current) { clearInterval(videoPollRef.current); videoPollRef.current = null }
+      if (videoStatus?.status === 'completed') { refreshAll() }
+      return
+    }
+    if (videoPollRef.current) return
+    videoPollRef.current = setInterval(() => {
+      api.videoAutolabelStatus().then(setVideoStatus).catch(() => {})
+    }, 1500)
+    return () => {
+      if (videoPollRef.current) { clearInterval(videoPollRef.current); videoPollRef.current = null }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoStatus?.status])
 
   useEffect(() => {
     if (activeFolder) {
@@ -127,16 +171,28 @@ export default function DataImport() {
   }
 
   // --- File handling ---
+  const addFiles = (incoming) => {
+    setFiles(prev => {
+      const room = MAX_IMPORT_BATCH - prev.length
+      if (room <= 0) {
+        showToast(`นำเข้าได้ไม่เกิน ${MAX_IMPORT_BATCH} ภาพต่อครั้ง`, 'error')
+        return prev
+      }
+      if (incoming.length > room) {
+        showToast(`เลือกได้อีก ${room} ภาพ (จำกัดไม่เกิน ${MAX_IMPORT_BATCH} ภาพต่อครั้ง) — ใช้แค่ ${room} ไฟล์แรก`, 'error')
+      }
+      return [...prev, ...incoming.slice(0, room)]
+    })
+  }
+
   const handleFileSelect = (e) => {
-    const newFiles = Array.from(e.target.files)
-    setFiles(prev => [...prev, ...newFiles])
+    addFiles(Array.from(e.target.files))
   }
 
   const handleDrop = (e) => {
     e.preventDefault()
     setDragOver(false)
-    const newFiles = Array.from(e.dataTransfer.files)
-    setFiles(prev => [...prev, ...newFiles])
+    addFiles(Array.from(e.dataTransfer.files))
   }
 
   const removeFile = (idx) => {
@@ -236,6 +292,60 @@ export default function DataImport() {
     } finally {
       setLsUploading(false)
       setTimeout(() => setLsProgress(0), 1500)
+    }
+  }
+
+  // --- Video auto-label ---
+  const handleVideoFile = (file) => {
+    if (!file) return
+    setVideoFile(file)
+    if (!videoClassName) setVideoClassName(file.name.replace(/\.[^.]+$/, ''))
+  }
+  const handleVideoSelect = (e) => handleVideoFile(e.target.files?.[0])
+  const handleVideoDrop = (e) => {
+    e.preventDefault()
+    setVideoDragOver(false)
+    handleVideoFile(e.dataTransfer.files?.[0])
+  }
+
+  const startVideoAutolabel = async () => {
+    if (!videoFile || videoStarting) return
+    if (!videoClassName.trim()) {
+      showToast('กรุณาระบุชื่อคลาส', 'error')
+      return
+    }
+    setVideoStarting(true)
+    const formData = new FormData()
+    formData.append('video', videoFile)
+    formData.append('model', videoModel)
+    formData.append('class_name', videoClassName.trim())
+    formData.append('split', videoSplit)
+    formData.append('conf', String(videoConf))
+    formData.append('every_n_frames', String(videoEveryN))
+    if (videoMaxFrames > 0) formData.append('max_frames', String(videoMaxFrames))
+    try {
+      const res = await api.videoAutolabelStart(formData)
+      if (!res.ok) {
+        showToast(res.error || 'เริ่มประมวลผลวิดีโอไม่สำเร็จ', 'error')
+        return
+      }
+      showToast('เริ่มดีเทคจากวิดีโอแล้ว กำลังประมวลผล...')
+      setVideoFile(null)
+      if (videoFileInputRef.current) videoFileInputRef.current.value = ''
+      api.videoAutolabelStatus().then(setVideoStatus).catch(() => {})
+    } catch (err) {
+      showToast(`เริ่มประมวลผลวิดีโอล้มเหลว: ${err.message}`, 'error')
+    } finally {
+      setVideoStarting(false)
+    }
+  }
+
+  const cancelVideoAutolabel = async () => {
+    try {
+      await api.videoAutolabelCancel()
+      showToast('ส่งคำสั่งยกเลิกแล้ว')
+    } catch (err) {
+      showToast(`ยกเลิกล้มเหลว: ${err.message}`, 'error')
     }
   }
 
@@ -471,7 +581,7 @@ export default function DataImport() {
                 disabled={uploading || files.length === 0}
               >
                 <Upload size={14} />
-                {uploading ? 'กำลังอัปโหลด...' : `อัปโหลด (${files.length} ไฟล์)`}
+                {uploading ? 'กำลังอัปโหลด...' : `อัปโหลด (${files.length}/${MAX_IMPORT_BATCH} ไฟล์)`}
               </button>
             </div>
           </div>
@@ -557,6 +667,143 @@ export default function DataImport() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Video Auto-Label ---- */}
+      <div className="card di-section">
+        <div className="card-title"><Video size={16} /> ดีเทคอัตโนมัติจากวิดีโอ</div>
+        <div className="di-overview-sub" style={{ marginBottom: 14 }}>
+          อัปโหลดวิดีโอ เลือกโมเดล ระบบจะดึงเฟรม ตีกรอบอัตโนมัติ และบันทึกเป็นภาพ + label ลง dataset ให้ทันที
+        </div>
+        <div className="di-upload-grid">
+          <div>
+            <div
+              className={`di-dropzone${videoDragOver ? ' drag-over' : ''}`}
+              onClick={() => videoFileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setVideoDragOver(true) }}
+              onDragLeave={() => setVideoDragOver(false)}
+              onDrop={handleVideoDrop}
+            >
+              <div className="di-dropzone-icon"><Video size={32} /></div>
+              <div className="di-dropzone-text">คลิกหรือลากไฟล์วิดีโอมาวางที่นี่</div>
+              <div className="di-dropzone-hint">รองรับ .mp4, .avi, .mov, .mkv, .webm</div>
+              <input
+                ref={videoFileInputRef}
+                type="file"
+                accept="video/*"
+                style={{ display: 'none' }}
+                onChange={handleVideoSelect}
+              />
+            </div>
+
+            {videoFile && (
+              <div className="di-file-list">
+                <div className="di-file-item">
+                  <Video size={12} />
+                  <span>{videoFile.name}</span>
+                  <button onClick={() => setVideoFile(null)}><X size={12} /></button>
+                </div>
+              </div>
+            )}
+
+            {videoStatus && videoStatus.status !== 'idle' && (
+              <div className="di-video-status">
+                <div className="di-video-status-row">
+                  <span className={`di-video-badge di-video-badge-${videoStatus.status}`}>
+                    {videoStatus.status === 'running' ? 'กำลังประมวลผล'
+                      : videoStatus.status === 'completed' ? 'เสร็จสิ้น'
+                      : videoStatus.status === 'cancelled' ? 'ยกเลิกแล้ว'
+                      : videoStatus.status === 'error' ? 'ผิดพลาด' : videoStatus.status}
+                  </span>
+                  {videoStatus.status === 'running' && (
+                    <button className="btn btn-outline" onClick={cancelVideoAutolabel}>
+                      <StopCircle size={13} /> ยกเลิก
+                    </button>
+                  )}
+                </div>
+                {videoStatus.status === 'running' && (
+                  <div className="di-progress">
+                    <div className="di-progress-bar">
+                      <div className="di-progress-fill" style={{ width: `${videoStatus.progress || 0}%` }} />
+                    </div>
+                    <div className="di-progress-text">
+                      เฟรม {videoStatus.frame_index ?? 0}/{videoStatus.total_frames || '?'} ·
+                      {' '}บันทึกแล้ว {videoStatus.frames_saved ?? 0} ภาพ ·
+                      {' '}พบ {videoStatus.detections ?? 0} วัตถุ
+                    </div>
+                  </div>
+                )}
+                {videoStatus.status === 'completed' && (
+                  <div className="di-video-result">
+                    บันทึก {videoStatus.frames_saved ?? 0} ภาพ พบ {videoStatus.detections ?? 0} วัตถุ
+                    {videoStatus.dest ? <> ลงโฟลเดอร์ <code>{videoStatus.dest}</code></> : null}
+                  </div>
+                )}
+                {videoStatus.status === 'error' && (
+                  <div className="di-ls-errors"><div>{videoStatus.error}</div></div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="di-upload-options">
+            <div className="di-field">
+              <label>โมเดลที่ใช้ดีเทค</label>
+              <select value={videoModel} onChange={e => setVideoModel(e.target.value)}>
+                {videoModels.length === 0 && <option value="">-- ไม่พบโมเดล --</option>}
+                {videoModels.map((m, i) => {
+                  const value = m.path || m.best_pt || m.name || ''
+                  const label = m.name || m.run || value
+                  return <option key={value || i} value={value}>{label}</option>
+                })}
+              </select>
+            </div>
+            <div className="di-field">
+              <label>ชื่อคลาส (Class Name)</label>
+              <input
+                list="class-list"
+                value={videoClassName}
+                onChange={e => setVideoClassName(e.target.value)}
+                placeholder="เช่น part_a, defect..."
+              />
+            </div>
+            <div className="di-field">
+              <label>Split</label>
+              <select value={videoSplit} onChange={e => setVideoSplit(e.target.value)}>
+                <option value="train">Train</option>
+                <option value="val">Validation</option>
+                <option value="test">Test</option>
+              </select>
+            </div>
+            <div className="di-field-row">
+              <div className="di-field">
+                <label>ทุก N เฟรม</label>
+                <input type="number" min="1" value={videoEveryN}
+                  onChange={e => setVideoEveryN(Math.max(1, parseInt(e.target.value) || 1))} />
+              </div>
+              <div className="di-field">
+                <label>Confidence</label>
+                <input type="number" min="0.05" max="0.95" step="0.05" value={videoConf}
+                  onChange={e => setVideoConf(parseFloat(e.target.value) || 0.25)} />
+              </div>
+              <div className="di-field">
+                <label>จำกัดเฟรม (0=ไม่จำกัด)</label>
+                <input type="number" min="0" value={videoMaxFrames}
+                  onChange={e => setVideoMaxFrames(parseInt(e.target.value) || 0)} />
+              </div>
+            </div>
+            <div className="di-upload-actions">
+              <button
+                className="btn btn-primary"
+                onClick={startVideoAutolabel}
+                disabled={videoStarting || !videoFile || videoStatus?.status === 'running'}
+              >
+                <Zap size={14} />
+                {videoStarting ? 'กำลังอัปโหลด...' : 'เริ่มดีเทคจากวิดีโอ'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
