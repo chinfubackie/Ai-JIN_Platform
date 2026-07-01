@@ -159,7 +159,7 @@ def project_create(name, description="", dataset_dir=""):
             "INSERT INTO projects(name,description,dataset_dir,created_at,updated_at) VALUES(?,?,?,?,?)",
             (name, description, dataset_dir, t, t))
         pid = cur.lastrowid
-        activity_add("project_create", f"สร้างโปรเจกต์ {name}", project_id=pid)
+        activity_add("project_create", f"สร้างโปรเจกต์ {name}", project_id=pid, con=con)
         return pid
 
 
@@ -311,7 +311,7 @@ def run_create(run_name, project_id=None, model_base="yolov8n.pt",
             VALUES(?,?,?,?,?,?,'training',?,?)
         """, (project_id, run_name, model_base, epochs, batch, imgsz, t, t))
         rid = cur.lastrowid
-        activity_add("train_start", f"เริ่มเทรน {run_name}", project_id=project_id)
+        activity_add("train_start", f"เริ่มเทรน {run_name}", project_id=project_id, con=con)
         return rid
 
 
@@ -336,7 +336,7 @@ def run_finish(run_id, status="completed", metrics=None):
         if row:
             label = "เทรนเสร็จ" if status == "completed" else "เทรนผิดพลาด"
             activity_add(f"train_{status}", f"{label}: {row['run_name']}",
-                         project_id=row["project_id"])
+                         project_id=row["project_id"], con=con)
 
 
 def run_list(project_id=None, limit=50):
@@ -386,7 +386,7 @@ def model_register(name, path, run_id=None, project_id=None,
             (project_id,run_id,name,path,fmt,size_bytes,map50,map50_95,created_at)
             VALUES(?,?,?,?,?,?,?,?,?)
         """, (project_id, run_id, name, path, fmt, size_bytes, map50, map50_95, t))
-        activity_add("model_saved", f"บันทึกโมเดล {name}", project_id=project_id)
+        activity_add("model_saved", f"บันทึกโมเดล {name}", project_id=project_id, con=con)
         return cur.lastrowid
 
 
@@ -398,7 +398,7 @@ def model_deploy(model_id):
                           (model_id,)).fetchone()
         if row:
             activity_add("model_deploy", f"Deploy โมเดล {row['name']}",
-                         project_id=row["project_id"])
+                         project_id=row["project_id"], con=con)
 
 
 def model_list(project_id=None):
@@ -420,7 +420,16 @@ def model_delete(model_id):
 
 # ── Activity Log ──────────────────────────────────────────────────────
 
-def activity_add(event_type, title, detail="", project_id=None):
+def activity_add(event_type, title, detail="", project_id=None, con=None):
+    """Log an activity entry. Pass an existing *con* when calling from inside
+    another function's own `with get_db()` block — opening a second connection
+    there would try to write while the first's transaction is still open,
+    deadlocking both until the busy timeout trips ("database is locked")."""
+    if con is not None:
+        con.execute(
+            "INSERT INTO activity_log(event_type,title,detail,project_id,created_at) VALUES(?,?,?,?,?)",
+            (event_type, title, detail, project_id, now_iso()))
+        return
     with get_db() as con:
         con.execute(
             "INSERT INTO activity_log(event_type,title,detail,project_id,created_at) VALUES(?,?,?,?,?)",
