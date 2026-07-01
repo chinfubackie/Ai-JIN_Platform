@@ -9,3 +9,7 @@ dataset/
 runs/
 models/*.pt
 webapp/aijin.db
+tmp_pytest/
+webapp/server-smoke.*.log
+models/*.ndjson
+*.pdf
