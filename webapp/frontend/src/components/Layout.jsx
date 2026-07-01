@@ -27,6 +27,7 @@ const Logo = () => (
 /* ---- Top navbar tabs ---- */
 const TOP_TABS = [
   { to: '/dashboard', label: 'Home' },
+  { to: '/cameras', label: 'Camera' },
   { to: '/annotator', label: 'Annotate' },
   { to: '/training', label: 'Train' },
   { to: '/demo', label: 'Inference' },
@@ -38,6 +39,7 @@ const TOP_TABS = [
 /* ---- Sidebar nav items ---- */
 const SIDEBAR_NAV = [
   { to: '/dashboard', icon: Home, label: 'Home' },
+  { to: '/cameras', icon: PlayCircle, label: 'Camera' },
   { to: '/projects', icon: FolderOpen, label: 'Projects' },
   { to: '/dataset', icon: Images, label: 'Datasets' },
   { to: '/annotator', icon: PenTool, label: 'Annotate' },

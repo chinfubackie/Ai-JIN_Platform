@@ -914,8 +914,9 @@ def _yolo_txt_lines(results):
             bw, bh = (x2 - x1) / w, (y2 - y1) / h
             lines.append(f"{cls_id} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
     return lines
-
-
+    
+    
+# ── API: Predict (proxy to YOLO server) ──────────────────────────────
 # ── API: Batch auto-label (run YOLO across a whole folder) ───────────
 @app.route("/api/autolabel/batch", methods=["POST"])
 def api_autolabel_batch():
@@ -2232,6 +2233,134 @@ def api_lm_chat_stream():
 
     return Response(generate(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ── API: Camera & Counting ───────────────────────────────────────────
+def _camera_available():
+    try:
+        from camera_manager import camera_manager
+        return True
+    except Exception:
+        return False
+
+
+def _get_camera_manager():
+    from camera_manager import camera_manager
+    return camera_manager
+
+
+@app.route("/api/cameras")
+def api_cameras():
+    if not _camera_available():
+        return jsonify({"cameras": []})
+    cm = _get_camera_manager()
+    return jsonify({"cameras": cm.list_cameras()})
+
+
+@app.route("/api/cameras", methods=["POST"])
+def api_camera_add():
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    data = request.json or {}
+    source = data.get("source", "").strip()
+    if not source:
+        return jsonify({"ok": False, "error": "source is required"}), 400
+    from camera_manager import CameraConfig
+    config = CameraConfig(
+        source=source,
+        name=data.get("name", source),
+        fps_target=int(data.get("fps_target", 15)),
+        conf_threshold=float(data.get("conf_threshold", 0.25)),
+        iou_threshold=float(data.get("iou_threshold", 0.45)),
+    )
+    cm = _get_camera_manager()
+    cam_id = cm.add_camera(config)
+    return jsonify({"ok": True, "id": cam_id})
+
+
+@app.route("/api/cameras/<int:camera_id>")
+def api_camera_status(camera_id):
+    if not _camera_available():
+        return jsonify({"error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cam = cm.get_camera(camera_id)
+    if not cam:
+        return jsonify({"error": "camera not found"}), 404
+    return jsonify(cam.get_status())
+
+
+@app.route("/api/cameras/<int:camera_id>", methods=["DELETE"])
+def api_camera_remove(camera_id):
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cm.remove_camera(camera_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cameras/<int:camera_id>/start", methods=["POST"])
+def api_camera_start(camera_id):
+    """CameraThread auto-starts on creation; this is a no-op kept for
+    frontend compatibility.  If the camera errored, remove and re-add."""
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cam = cm.get_camera(camera_id)
+    if not cam:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
+    return jsonify({"ok": True, "status": cam.state.status})
+
+
+@app.route("/api/cameras/<int:camera_id>/stop", methods=["POST"])
+def api_camera_stop(camera_id):
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cam = cm.get_camera(camera_id)
+    if not cam:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
+    cam.stop()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cameras/<int:camera_id>/stream")
+def api_camera_stream(camera_id):
+    if not _camera_available():
+        return jsonify({"error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cam = cm.get_camera(camera_id)
+    if not cam:
+        return jsonify({"error": "camera not found"}), 404
+    from stream_handler import camera_sse_stream
+    return camera_sse_stream(cam)
+
+
+@app.route("/api/counting/<int:cam_id>")
+def api_counting_stats(cam_id):
+    if not _camera_available():
+        return jsonify({"error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if not cam:
+        return jsonify({"error": "camera not found"}), 404
+    engine = cam.get_counting_engine()
+    if not engine:
+        return jsonify({"error": "counting engine not ready"}), 503
+    return jsonify(engine.get_stats())
+
+
+@app.route("/api/counting/<int:cam_id>/reset", methods=["POST"])
+def api_counting_reset(cam_id):
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if not cam:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
+    engine = cam.get_counting_engine()
+    if engine:
+        engine.reset_counts()
+    return jsonify({"ok": True})
 
 
 # ── Run ──────────────────────────────────────────────────────────────

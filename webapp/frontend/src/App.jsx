@@ -9,6 +9,7 @@ import Training from './pages/Training'
 import ModelManagement from './pages/ModelManagement'
 import ApiDocs from './pages/ApiDocs'
 import Projects from './pages/Projects'
+import LiveStream from './pages/LiveStream'
 import Settings from './pages/Settings'
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/demo" element={<LiveDemo />} />
+          <Route path="/cameras" element={<LiveStream />} />
           <Route path="/dataset" element={<Dataset />} />
           <Route path="/annotator" element={<Annotator />} />
           <Route path="/import" element={<DataImport />} />

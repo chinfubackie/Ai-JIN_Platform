@@ -1,0 +1,382 @@
+/* ── Camera Management Layout ── */
+
+.live-stream-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 260px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .live-stream-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Add Camera Form ── */
+.add-cam-form {
+  margin-bottom: 16px;
+}
+
+.add-cam-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+@media (max-width: 800px) {
+  .add-cam-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.add-cam-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ── Camera List ── */
+.cam-list-panel {
+  min-width: 0;
+}
+
+.cam-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cam-list-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.cam-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cam-card:hover {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.cam-card.cam-online {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.04);
+}
+
+.cam-card.cam-error {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.cam-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cam-card-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg-dark);
+  color: var(--text-muted);
+}
+
+.cam-online .cam-card-icon {
+  color: var(--green);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.cam-error .cam-card-icon {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.cam-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cam-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cam-card-source {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+.cam-card-status-dot {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.cam-online .cam-card-status-dot {
+  color: var(--green);
+}
+
+.cam-error .cam-card-status-dot {
+  color: var(--red);
+}
+
+.cam-card-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding-left: 46px;
+}
+
+.cam-card-error {
+  font-size: 11px;
+  color: var(--red);
+  margin-top: 6px;
+  padding-left: 46px;
+}
+
+.cam-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 46px;
+}
+
+.cam-card-actions .btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  height: auto;
+}
+
+/* ── Stream Panel ── */
+.stream-panel {
+  min-width: 0;
+}
+
+.stream-card .card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: white;
+  background: var(--red);
+  border-radius: 4px;
+  padding: 2px 7px;
+  margin-left: auto;
+  animation: pulse-live 2s infinite;
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.stream-container {
+  position: relative;
+}
+
+.stream-video {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius);
+  background: var(--bg-dark);
+  aspect-ratio: 4/3;
+  object-fit: contain;
+}
+
+.stream-loading,
+.stream-error,
+.stream-idle,
+.stream-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  border-radius: var(--radius);
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  min-height: 240px;
+}
+
+.stream-error {
+  color: var(--red);
+}
+
+.stream-error span {
+  color: var(--text-secondary);
+}
+
+.stream-idle span {
+  font-size: 14px;
+}
+
+.stream-info-bar {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.stream-info-bar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Stats Panel ── */
+.stats-panel {
+  min-width: 0;
+}
+
+.count-stats {
+  margin-top: 8px;
+}
+
+.count-item-main {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.count-item-main .count-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.count-item-main .count-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.count-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.count-label {
+  color: var(--text-secondary);
+}
+
+.count-value {
+  font-weight: 600;
+}
+
+.count-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 10px 0 4px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.stats-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ── Quick Actions ── */
+.quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.quick-actions .btn {
+  justify-content: center;
+}
+
+.stats-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 10px;
+  text-align: center;
+}
+
+/* ── Error bar ── */
+.error-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: var(--red);
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ── Page subtitle ── */
+.page-subtitle {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 4px;
+}

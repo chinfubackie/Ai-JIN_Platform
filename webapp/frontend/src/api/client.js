@@ -109,6 +109,25 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // ── Camera & Counting ──
+  cameras: () => fetchJSON('/cameras'),
+  cameraAdd: (data) =>
+    fetchJSON('/cameras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  cameraRemove: (id) =>
+    fetchJSON(`/cameras/${id}`, { method: 'DELETE' }),
+  cameraStart: (id) =>
+    fetchJSON(`/cameras/${id}/start`, { method: 'POST' }),
+  cameraStop: (id) =>
+    fetchJSON(`/cameras/${id}/stop`, { method: 'POST' }),
+  cameraStatus: (id) => fetchJSON(`/cameras/${id}`),
+  countingStats: (camId) => fetchJSON(`/counting/${camId}`),
+  countingReset: (camId) =>
+    fetchJSON(`/counting/${camId}/reset`, { method: 'POST' }),
+
   // ── Database / Projects ──
   dbStats: () => fetchJSON('/db/stats'),
   activity: (limit = 20) => fetchJSON(`/activity?limit=${limit}`),
