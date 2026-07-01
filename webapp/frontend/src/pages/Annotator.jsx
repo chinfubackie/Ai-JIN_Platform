@@ -5,7 +5,7 @@ import {
   ZoomIn, ZoomOut, Save, Sparkles, Plus, MousePointer2,
   Square, Pentagon, Wand2, Zap, ArrowRight, CheckCircle2,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
-  Layers, Tag,
+  Layers, Tag, Play, Pause,
 } from 'lucide-react'
 import LMAssistant from '../components/LMAssistant'
 import './Annotator.css'
@@ -55,6 +55,13 @@ export default function Annotator() {
 
   /* ── auto-label ── */
   const [autoLoading, setAutoLoading] = useState(false)
+  const [autoModels, setAutoModels] = useState([])
+  const [autoModel, setAutoModel] = useState('')
+  const [batchLoading, setBatchLoading] = useState(false)
+
+  /* ── auto-play (auto-detect each image, dwell, auto-advance) ── */
+  const [autoPlay, setAutoPlay]           = useState(false)
+  const [autoPlayDelay, setAutoPlayDelay] = useState(2)
 
   /* ── LM ── */
   const [lmVisible, setLmVisible] = useState(false)
@@ -71,9 +78,12 @@ export default function Annotator() {
   const wrapRef    = useRef(null)
   const imgRef     = useRef(null)
   const imgNat     = useRef({ w: 1, h: 1 })
+  const loadedImageRef = useRef(null) // path of the image currently loaded into imgRef/imgNat
   const renderRect = useRef({ w: 1, h: 1, ox: 0, oy: 0 })
   const boxDrawRef = useRef(null)
   const drawRef    = useRef(null)
+  const autoPlayRef = useRef(false)
+  const autoPlayTimeoutRef = useRef(null)
 
   /* ── helpers ── */
   function showToast(msg, type = 'success') {
@@ -113,6 +123,17 @@ export default function Annotator() {
   /* ── load projects ── */
   useEffect(() => {
     api.projects().then(data => setProjects(Array.isArray(data) ? data : [])).catch(() => {})
+  }, [])
+
+  /* ── load models for auto-label ── */
+  useEffect(() => {
+    api.models().then(data => {
+      const list = Array.isArray(data) ? data : data.models || data.registry || []
+      setAutoModels(list)
+      const deployed = data?.active?.active_model
+      if (deployed) setAutoModel(deployed)
+      else if (list.length > 0) setAutoModel(list[0].path || list[0].best_pt || list[0].name || '')
+    }).catch(() => setAutoModels([]))
   }, [])
 
   /* ── persist: save folder index + classes on change ── */
@@ -259,6 +280,7 @@ export default function Annotator() {
     img.onload = () => {
       imgRef.current = img
       imgNat.current = { w: img.naturalWidth, h: img.naturalHeight }
+      loadedImageRef.current = currentImage
       requestAnimationFrame(() => drawRef.current?.())
     }
     img.src = api.image(currentImage)
@@ -629,6 +651,7 @@ export default function Annotator() {
       const blob = await new Promise(r => c2.toBlob(r, 'image/jpeg', 0.92))
       const fd = new FormData()
       fd.append('image', blob, 'img.jpg')
+      if (autoModel) fd.append('model', autoModel)
       const res = await api.predictLocal(fd)
       if (!res.detections?.length) { showToast('ไม่พบวัตถุ', 'error'); return }
       pushHistory([...boxes], [...polygons])
@@ -651,6 +674,67 @@ export default function Annotator() {
       setAutoLoading(false)
     }
   }
+
+  /* ── Auto-label whole folder (batch) ── */
+  async function autoLabelFolder() {
+    if (!folder || batchLoading) return
+    setBatchLoading(true)
+    try {
+      const res = await api.autolabelBatch({ folder, model: autoModel, conf: 0.25, iou: 0.45 })
+      if (!res.ok) { showToast(res.error || 'Auto-label ทั้งโฟลเดอร์ล้มเหลว', 'error'); return }
+      showToast(`Auto-label ทั้งโฟลเดอร์: ${res.labeled}/${res.total} ภาพ, ${res.detections} วัตถุ`)
+      // reload current image labels if they were just written
+      if (currentImage) {
+        api.labelExt(currentImage).then(data => {
+          if (data.boxes?.length) setBoxes(data.boxes.map(b => [...b]))
+          if (data.polygons?.length) setPolygons(data.polygons)
+        }).catch(() => {})
+      }
+    } catch (err) {
+      showToast('Auto-label ทั้งโฟลเดอร์ล้มเหลว: ' + err.message, 'error')
+    } finally {
+      setBatchLoading(false)
+    }
+  }
+
+  /* ── auto-play: detect on the current image, wait autoPlayDelay
+     seconds so it can be reviewed/edited, save, then auto-advance.
+     Repeats until the last image or until the user stops it. ── */
+  useEffect(() => { autoPlayRef.current = autoPlay }, [autoPlay])
+
+  useEffect(() => {
+    if (!autoPlay || !currentImage) return
+    let cancelled = false
+    ;(async () => {
+      // The image element loads asynchronously (new Image().onload) — wait
+      // until it actually finishes loading *this* image before detecting,
+      // otherwise autoLabel() runs against the previous image's stale
+      // pixels/dimensions while the boxes get attached to the new one.
+      while (!cancelled && autoPlayRef.current && loadedImageRef.current !== currentImage) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+      if (cancelled || !autoPlayRef.current) return
+      await autoLabel()
+      if (cancelled || !autoPlayRef.current) return
+      await new Promise(resolve => {
+        autoPlayTimeoutRef.current = setTimeout(resolve, autoPlayDelay * 1000)
+      })
+      if (cancelled || !autoPlayRef.current) return
+      await save()
+      if (cancelled || !autoPlayRef.current) return
+      if (imgIdx < imageList.length - 1) {
+        setImgIdx(i => i + 1)
+      } else {
+        setAutoPlay(false)
+        showToast('เล่นอัตโนมัติจบแล้ว (ถึงภาพสุดท้าย)')
+      }
+    })()
+    return () => {
+      cancelled = true
+      clearTimeout(autoPlayTimeoutRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPlay, currentImage])
 
   /* ── hit test ── */
   function hitTest(cx, cy) {
@@ -837,8 +921,39 @@ export default function Annotator() {
               ))}
             </select>
           )}
-          <button className="ann-tool-btn" onClick={autoLabel} disabled={!currentImage || autoLoading} title="Auto-label ด้วย YOLO">
+          {autoModels.length > 0 && (
+            <select
+              className="ann-project-select"
+              value={autoModel}
+              onChange={e => setAutoModel(e.target.value)}
+              title="โมเดลที่ใช้สำหรับ Auto-label"
+            >
+              {autoModels.map((m, i) => {
+                const value = m.path || m.best_pt || m.name || ''
+                const label = m.name || m.run || value
+                return <option key={value || i} value={value}>{label}</option>
+              })}
+            </select>
+          )}
+          <button className="ann-tool-btn" onClick={autoLabel} disabled={!currentImage || autoLoading} title="Auto-label ภาพปัจจุบันด้วย YOLO">
             {autoLoading ? <><span className="ann-spinner-inline" /> Auto...</> : <><Zap size={14} /> Auto-label</>}
+          </button>
+          <button className="ann-tool-btn" onClick={autoLabelFolder} disabled={!folder || batchLoading} title="Auto-label ทั้งโฟลเดอร์">
+            {batchLoading ? <><span className="ann-spinner-inline" /> กำลังประมวลผล...</> : <><Layers size={14} /> Auto-label ทั้งโฟลเดอร์</>}
+          </button>
+          <input
+            type="number" min={0} step={0.5} value={autoPlayDelay}
+            onChange={e => setAutoPlayDelay(Math.max(0, Number(e.target.value) || 0))}
+            title="เวลาหยุดรอต่อภาพก่อนไปภาพถัดไป (วินาที)"
+            style={{ width: 56 }}
+          />
+          <button
+            className={`ann-tool-btn${autoPlay ? ' detect' : ''}`}
+            onClick={() => setAutoPlay(p => !p)}
+            disabled={!folder || imgIdx >= imageList.length - 1 && !autoPlay}
+            title="เล่นอัตโนมัติ: ดีเทคทีละภาพ หยุดรอตามเวลาที่ตั้ง แล้วไปภาพถัดไปเอง"
+          >
+            {autoPlay ? <><Pause size={14} /> หยุด</> : <><Play size={14} /> เล่นอัตโนมัติ</>}
           </button>
           <button className={`ann-tool-btn${lmVisible ? ' detect' : ''}`} onClick={() => setLmVisible(v => !v)}>
             <Sparkles size={14} /> Ask LM
