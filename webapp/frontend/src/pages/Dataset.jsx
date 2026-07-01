@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import {
   FolderOpen, Image, ChevronLeft, ChevronRight,
-  X, Loader2, Tag, Pencil, LayoutGrid,
+  X, Loader2, Tag, Pencil, LayoutGrid, Trash2,
 } from 'lucide-react'
 import './Dataset.css'
 
@@ -38,6 +38,7 @@ export default function Dataset() {
   const [lightbox, setLightbox] = useState(null)  // { imgPath, imgIdx }
   const [labelData, setLabelData] = useState(null)
   const [labelLoading, setLabelLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const canvasRef = useRef(null)
   const imgRef    = useRef(null)
 
@@ -99,11 +100,22 @@ export default function Dataset() {
 
   const closeLightbox = () => { setLightbox(null); setLabelData(null) }
 
+  const goToImage = (idx) => {
+    if (idx < 0 || idx >= images.length) return
+    const img = images[idx]
+    openLightbox(typeof img === 'string' ? img : img.path, idx)
+  }
+
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') closeLightbox() }
+    const onKey = (e) => {
+      if (!lightbox) return
+      if (e.key === 'Escape') closeLightbox()
+      if (e.key === 'ArrowLeft') goToImage(lightbox.imgIdx - 1)
+      if (e.key === 'ArrowRight') goToImage(lightbox.imgIdx + 1)
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [lightbox, images])
 
   const drawBoxes = useCallback(() => {
     const canvas = canvasRef.current
@@ -149,6 +161,24 @@ export default function Dataset() {
     localStorage.setItem('ann_last_folder', activeFolder)
     localStorage.setItem(`ann_idx_${activeFolder}`, String(lightbox.imgIdx))
     navigate('/annotator')
+  }
+
+  const deleteCurrentImage = async () => {
+    if (!lightbox || deleting) return
+    const name = lightbox.imgPath.split('/').pop().split('\\').pop()
+    if (!confirm(`ลบภาพ "${name}" ใช่ไหม? (label ที่ผูกอยู่จะถูกลบไปด้วย)`)) return
+    setDeleting(true)
+    try {
+      await api.importDelete([lightbox.imgPath])
+      const removedIdx = lightbox.imgIdx
+      setImages(prev => prev.filter((_, i) => i !== removedIdx))
+      setTotal(t => Math.max(0, t - 1))
+      closeLightbox()
+    } catch {
+      alert('ลบไม่สำเร็จ')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const boxCount    = (labelData?.labels || []).length
@@ -298,10 +328,14 @@ export default function Dataset() {
             <div className="ds-lb-header">
               <span className="ds-lb-title">
                 {lightbox.imgPath.split('/').pop().split('\\').pop()}
+                <span className="ds-lb-pos">{lightbox.imgIdx + 1} / {images.length}</span>
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-primary" onClick={openInAnnotator}>
                   <Pencil size={14} /> เปิดใน Annotator
+                </button>
+                <button className="btn btn-outline ds-lb-delete" onClick={deleteCurrentImage} disabled={deleting}>
+                  <Trash2 size={14} /> {deleting ? 'กำลังลบ...' : 'ลบภาพ'}
                 </button>
                 <button className="ds-lb-close" onClick={closeLightbox}><X size={18} /></button>
               </div>
@@ -309,6 +343,14 @@ export default function Dataset() {
 
             {/* Image canvas */}
             <div className="ds-lb-body">
+              <button
+                className="ds-lb-nav ds-lb-nav-prev"
+                onClick={() => goToImage(lightbox.imgIdx - 1)}
+                disabled={lightbox.imgIdx <= 0}
+                title="ภาพก่อนหน้า (←)"
+              >
+                <ChevronLeft size={22} />
+              </button>
               {labelLoading ? (
                 <div className="ds-state"><Loader2 size={18} className="spin" /> กำลังโหลด...</div>
               ) : (
@@ -322,6 +364,14 @@ export default function Dataset() {
                   <canvas ref={canvasRef} />
                 </div>
               )}
+              <button
+                className="ds-lb-nav ds-lb-nav-next"
+                onClick={() => goToImage(lightbox.imgIdx + 1)}
+                disabled={lightbox.imgIdx >= images.length - 1}
+                title="ภาพถัดไป (→)"
+              >
+                <ChevronRight size={22} />
+              </button>
             </div>
 
             {/* Footer */}
