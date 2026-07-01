@@ -42,9 +42,9 @@ services:
       - label_studio_data:/label-studio/data
       - ${DATASET_PATH:-./dataset}:/label-studio/files:ro
     ports:
-      - "8085:8085"
+      - "8085:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8085/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
       start_period: 60s
@@ -58,20 +58,31 @@ services:
     container_name: aijin-webapp
     restart: unless-stopped
     environment:
-      LABEL_STUDIO_URL: http://label-studio:8085
+      LABEL_STUDIO_URL: http://label-studio:8080
       LABEL_STUDIO_TOKEN: ${LABEL_STUDIO_TOKEN:-}
       YOLO_TRAIN_URL: ${YOLO_TRAIN_URL:-http://host.docker.internal:8111}
       DATASET_PATH: /dataset
       RUNS_PATH: /runs
       MODEL_PATH: /models
     volumes:
-      - ${DATASET_PATH:-./dataset}:/dataset:ro
-      - ${RUNS_PATH:-./runs}:/runs:ro
-      - ${MODEL_PATH:-./models}:/models:ro
+      - ${DATASET_PATH:-./dataset}:/dataset
+      - ${RUNS_PATH:-./runs}:/runs
+      - ${MODEL_PATH:-./models}:/models
     ports:
       - "8501:8501"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # PyTorch's multiprocess DataLoader (used during YOLO training) shares
+    # tensors via /dev/shm; Docker's 64MB default is too small and crashes
+    # training with "unable to allocate shared memory... No space left on device".
+    shm_size: '2gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 volumes:
   postgres_data:
