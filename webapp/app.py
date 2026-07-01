@@ -33,11 +33,17 @@ DATASET = Path(os.getenv("DATASET_PATH", r"D:\Ai-JIN_V10.0_patch_output\dataset"
 RUNS = Path(os.getenv("RUNS_PATH", r"D:\Ai-JIN_V10.0_patch_output\runs"))
 MODEL_DIR = Path(os.getenv("MODEL_PATH", r"D:\Ai-JIN_Platform\models"))
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
+VIDEO_EXT = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+MAX_IMPORT_BATCH = 1500
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.93:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llava")
 SAM3_INSTALL_HINT = (
-    "Run: pip install -U ultralytics && pip uninstall clip -y && "
-    "pip install git+https://github.com/ultralytics/CLIP.git"
+    "ultralytics>=8.4 already ships a native SAM3 implementation "
+    "(ultralytics.models.sam.SAM3SemanticPredictor) — no separate package/repo "
+    "install needed. What's actually missing is the checkpoint: request access "
+    "to https://huggingface.co/facebook/sam3 (gated), authenticate "
+    "(e.g. `hf auth login`), download sam3.pt, and place it at models/sam3.pt "
+    "(or MODEL_PATH/sam3.pt)."
 )
 
 # Runtime-mutable config (can be updated via POST /api/config without restart)
@@ -399,6 +405,21 @@ def _start_local_training(config):
         run_name = config.get("name") or f"train_{time.strftime('%Y%m%d_%H%M')}"
     except Exception as e:
         return {"ok": False, "runner": "local", "error": str(e)}
+
+    try:
+        import yaml as _yaml
+        yaml_data = _yaml.safe_load(data_yaml.read_text(encoding="utf-8")) or {}
+        if not yaml_data.get("names"):
+            return {
+                "ok": False, "runner": "local",
+                "error": (
+                    f"{data_yaml} ไม่มีคลาส (nc=0) — เทรนไม่ได้ "
+                    "ตรวจสอบว่ามีภาพที่ label แล้วอยู่ใน images/train ของ dataset "
+                    "(generate-yaml จะหาคลาสจากโฟลเดอร์ที่มีภาพใน images/train เท่านั้น)"
+                ),
+            }
+    except (OSError, ValueError):
+        pass  # let ultralytics surface its own error if the yaml can't be read/parsed here
 
     project_dir = RUNS / "train"
     run_dir = project_dir / run_name
@@ -1403,6 +1424,12 @@ def api_import_upload():
     dest.mkdir(parents=True, exist_ok=True)
     label_dest.mkdir(parents=True, exist_ok=True)
     files = request.files.getlist("images") or request.files.getlist("files")
+    image_count = sum(1 for f in files if f.filename and Path(f.filename).suffix.lower() in IMG_EXT)
+    if image_count > MAX_IMPORT_BATCH:
+        return jsonify({
+            "ok": False,
+            "error": f"นำเข้าได้ไม่เกิน {MAX_IMPORT_BATCH} ภาพต่อครั้ง (ส่งมา {image_count} ภาพ)",
+        }), 400
     saved = []
     skipped = []
     for f in files:
@@ -1611,6 +1638,38 @@ def api_import_split_info():
     return jsonify(info)
 
 
+@app.route("/api/dataset/folder-stats")
+def api_dataset_folder_stats():
+    """Per-folder breakdown: total images, how many have a non-empty label
+    (ภาพเทรน — contain at least one box) vs an empty/missing one
+    (ภาพสิ่งแวดล้อม — background/negative, no objects)."""
+    folder = (request.args.get("folder") or "").strip()
+    if not folder:
+        return jsonify({"error": "folder required"}), 400
+    target = _safe_path(DATASET, folder)
+    if not target.exists() or not target.is_dir():
+        return jsonify({"error": f"folder not found: {folder}"}), 404
+
+    try:
+        rel = target.relative_to(DATASET / "auto_improve" / "images")
+        label_dir = DATASET / "auto_improve" / "labels" / rel
+    except ValueError:
+        label_dir = target.parent / "labels"
+
+    images = [f for f in target.iterdir() if f.suffix.lower() in IMG_EXT]
+    labeled = 0
+    for img in images:
+        label_file = label_dir / f"{img.stem}.txt"
+        if label_file.exists() and label_file.read_text(encoding="utf-8").strip():
+            labeled += 1
+    return jsonify({
+        "folder": folder,
+        "total": len(images),
+        "labeled": labeled,
+        "environment": len(images) - labeled,
+    })
+
+
 @app.route("/api/import/delete", methods=["POST"])
 def api_import_delete():
     """Delete images from dataset"""
@@ -1775,11 +1834,17 @@ def api_export_ndjson():
 def api_sam3_status():
     model_path, model_exists = _find_sam3_model()
     import_error = _sam3_import_error()
+    available = bool(model_exists and not import_error)
+    extra = {}
+    if import_error:
+        extra = {"error": import_error, "hint": SAM3_INSTALL_HINT}
+    elif not model_exists:
+        extra = {"error": f"sam3.pt not found at {model_path}", "hint": SAM3_INSTALL_HINT}
     return jsonify({
-        "available": bool(model_exists and not import_error),
+        "available": available,
         "model_exists": model_exists,
         "model_path": str(model_path),
-        **({"error": import_error, "hint": SAM3_INSTALL_HINT} if import_error else {}),
+        **extra,
     })
 
 

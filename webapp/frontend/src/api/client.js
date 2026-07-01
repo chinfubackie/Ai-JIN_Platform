@@ -58,6 +58,8 @@ export const api = {
   },
   importClasses: () => fetchJSON('/import/classes'),
   importSplitInfo: () => fetchJSON('/import/split-info'),
+  datasetFolderStats: (folder) =>
+    fetchJSON(`/dataset/folder-stats?folder=${encodeURIComponent(folder)}`),
   importDelete: (files) =>
     fetchJSON('/import/delete', {
       method: 'POST',
