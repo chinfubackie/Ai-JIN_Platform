@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { api } from '../api/client'
-import { Play, Square, Download, Brain, Clock, Activity, BarChart3, Target, Layers } from 'lucide-react'
+import { Play, Square, Download, Brain, Clock, Activity, BarChart3, Target, Layers, ChevronDown, FolderOpen } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import './Training.css'
 
@@ -60,6 +60,7 @@ const TRACKERS = [
 
 export default function Training() {
   const [activeTab, setActiveTab] = useState('train') // 'train' | 'tracking'
+  const [showAdvancedTracking, setShowAdvancedTracking] = useState(false)
 
   // Config form state
   const [config, setConfig] = useState({
@@ -97,6 +98,12 @@ export default function Training() {
   const [models, setModels] = useState([])
   const [exporting, setExporting] = useState(null) // "modelName:format"
 
+  // Dataset folder to train on + its labeled/environment breakdown
+  const [datasetFolders, setDatasetFolders] = useState([])
+  const [selectedFolder, setSelectedFolder] = useState('')
+  const [folderStats, setFolderStats] = useState(null)
+  const [folderStatsLoading, setFolderStatsLoading] = useState(false)
+
   const intervalRef = useRef(null)
   const logRef = useRef(null)
 
@@ -109,7 +116,21 @@ export default function Training() {
       const scanned = results[1].status === 'fulfilled' ? (results[1].value?.models || results[1].value || []) : []
       setModels(mergeModels(dbRuns, scanned))
     })
+    api.folders().then(data => {
+      const list = (data?.folders || data || [])
+      setDatasetFolders(list.map(f => typeof f === 'string' ? { path: f, count: 0 } : f))
+    }).catch(() => {})
   }, [])
+
+  // Labeled ("ภาพเทรน") vs unlabeled ("ภาพสิ่งแวดล้อม") breakdown for the folder to train on
+  useEffect(() => {
+    if (!selectedFolder) { setFolderStats(null); return }
+    setFolderStatsLoading(true)
+    api.datasetFolderStats(selectedFolder)
+      .then(setFolderStats)
+      .catch(() => setFolderStats(null))
+      .finally(() => setFolderStatsLoading(false))
+  }, [selectedFolder])
 
   const localModelOptions = models
     .map(m => ({ value: modelPath(m), label: modelLabel(m) }))
@@ -262,6 +283,16 @@ export default function Training() {
                 </div>
               </div>
 
+              <button
+                type="button"
+                className="advanced-toggle"
+                onClick={() => setShowAdvancedTracking(v => !v)}
+              >
+                <ChevronDown size={14} className={showAdvancedTracking ? 'rotated' : ''} />
+                ขั้นสูง (Image size, Max age, Track thresholds, ReID)
+              </button>
+
+              {showAdvancedTracking && (<>
               <div className="form-row">
                 <div className="form-group">
                   <label>Image Size</label>
@@ -315,6 +346,7 @@ export default function Training() {
                   </label>
                 </div>
               )}
+              </>)}
             </div>
           </div>
 
@@ -366,9 +398,48 @@ export default function Training() {
         <div className="card">
           <div className="card-title"><Brain size={16} /> ตั้งค่าการเทรน</div>
           <div className="config-form">
+            <div className="form-group">
+              <label><FolderOpen size={13} style={{ verticalAlign: -2 }} /> โฟลเดอร์ dataset ที่จะเทรน</label>
+              <select
+                value={selectedFolder}
+                onChange={e => setSelectedFolder(e.target.value)}
+                disabled={isTraining}
+              >
+                <option value="">-- เลือกโฟลเดอร์เพื่อดูสถิติ --</option>
+                {datasetFolders.map(f => (
+                  <option key={f.path} value={f.path}>{f.path} ({f.count} ภาพ)</option>
+                ))}
+              </select>
+            </div>
+
+            {selectedFolder && (
+              <div className="folder-stats-card">
+                {folderStatsLoading ? (
+                  <span className="folder-stats-loading">กำลังโหลดสถิติ...</span>
+                ) : folderStats ? (
+                  <>
+                    <div className="folder-stats-row">
+                      <span>ภาพทั้งหมด</span>
+                      <strong>{folderStats.total}</strong>
+                    </div>
+                    <div className="folder-stats-row">
+                      <span><span className="folder-stats-labeled-dot" />ภาพเทรน (มี label)</span>
+                      <strong>{folderStats.labeled}</strong>
+                    </div>
+                    <div className="folder-stats-row">
+                      <span><span className="folder-stats-env-dot" />ภาพสิ่งแวดล้อม (ไม่มี label)</span>
+                      <strong>{folderStats.environment}</strong>
+                    </div>
+                  </>
+                ) : (
+                  <span className="folder-stats-loading">โหลดสถิติไม่สำเร็จ</span>
+                )}
+              </div>
+            )}
+
             {projects.length > 0 && (
               <div className="form-group">
-                <label>โปรเจกต์</label>
+                <label>โปรเจกต์ (สำหรับบันทึกประวัติ)</label>
                 <select
                   value={projectId}
                   onChange={e => setProjectId(e.target.value)}
