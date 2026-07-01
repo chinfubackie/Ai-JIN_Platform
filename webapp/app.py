@@ -23,7 +23,7 @@ except ImportError:
     pass
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB upload limit
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1GB upload limit (video files)
 
 # ── Config ────────────────────────────────────────────────────────────
 LS_URL = os.getenv("LABEL_STUDIO_URL", "http://localhost:8085")
@@ -51,6 +51,24 @@ _local_train_state = {
     "progress": 0,
     "log": "",
 }
+
+_video_label_lock = threading.Lock()
+_video_label_state = {
+    "status": "idle",
+    "progress": 0,
+    "log": "",
+}
+
+
+def _video_label_snapshot():
+    with _video_label_lock:
+        return dict(_video_label_state)
+
+
+def _set_video_label_state(**updates):
+    with _video_label_lock:
+        _video_label_state.update(updates)
+        return dict(_video_label_state)
 
 
 def _safe_path(base, user_path):
@@ -861,6 +879,219 @@ def api_predict_local():
         "model": model_path,
         "parameters": {"conf": conf, "iou": iou, "imgsz": imgsz},
     })
+
+
+def _yolo_txt_lines(results):
+    """Convert ultralytics results to YOLO-format label lines."""
+    lines = []
+    for r in results:
+        h, w = r.orig_shape
+        for box in r.boxes:
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            cls_id = int(box.cls[0])
+            cx, cy = (x1 + x2) / (2 * w), (y1 + y2) / (2 * h)
+            bw, bh = (x2 - x1) / w, (y2 - y1) / h
+            lines.append(f"{cls_id} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+    return lines
+
+
+# ── API: Batch auto-label (run YOLO across a whole folder) ───────────
+@app.route("/api/autolabel/batch", methods=["POST"])
+def api_autolabel_batch():
+    """Run YOLO detection on every image in a dataset folder and write YOLO-format labels."""
+    try:
+        from ultralytics import YOLO
+    except ImportError:
+        return jsonify({"ok": False, "error": "ultralytics not installed on webapp server"}), 500
+
+    data = request.get_json(silent=True) or {}
+    folder = (data.get("folder") or "").strip()
+    if not folder:
+        return jsonify({"ok": False, "error": "folder required"}), 400
+    try:
+        conf = float(data.get("conf", 0.25))
+        iou = float(data.get("iou", 0.45))
+    except (TypeError, ValueError):
+        conf, iou = 0.25, 0.45
+    overwrite = bool(data.get("overwrite", False))
+    model_path = _resolve_training_model(data.get("model") or "best.pt")
+
+    target = _safe_path(DATASET, folder)
+    if not target.exists() or not target.is_dir():
+        return jsonify({"ok": False, "error": f"folder not found: {folder}"}), 404
+
+    images = sorted(f for f in target.iterdir() if f.suffix.lower() in IMG_EXT)
+    if not images:
+        return jsonify({"ok": True, "labeled": 0, "skipped": 0, "total": 0, "detections": 0})
+
+    # Mirror the images/... path under labels/ — matches ultralytics'
+    # img2label_paths() lookup convention. A sibling "<folder>/labels" (the
+    # old behavior here) is never found by training.
+    try:
+        rel = target.relative_to(DATASET / "auto_improve" / "images")
+        label_dir = DATASET / "auto_improve" / "labels" / rel
+    except ValueError:
+        label_dir = target.parent / "labels"
+    label_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        model = YOLO(model_path)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"failed to load model: {e}"}), 500
+
+    labeled = skipped = detection_total = 0
+    for img_path in images:
+        label_file = label_dir / f"{img_path.stem}.txt"
+        if label_file.exists() and not overwrite:
+            skipped += 1
+            continue
+        try:
+            results = model.predict(source=str(img_path), conf=conf, iou=iou, verbose=False)
+        except Exception:
+            skipped += 1
+            continue
+        lines = _yolo_txt_lines(results)
+        label_file.write_text("\n".join(lines) + ("\n" if lines else ""))
+        detection_total += len(lines)
+        labeled += 1
+
+    return jsonify({
+        "ok": True, "labeled": labeled, "skipped": skipped,
+        "total": len(images), "detections": detection_total, "model": model_path,
+    })
+
+
+# ── API: Auto-detect from video (extract frames + auto-label) ────────
+@app.route("/api/video/autolabel/start", methods=["POST"])
+def api_video_autolabel_start():
+    """Upload a video, run YOLO every N frames, save detected frames + YOLO labels."""
+    try:
+        from ultralytics import YOLO
+        import cv2
+    except ImportError as e:
+        return jsonify({"ok": False, "error": f"missing dependency: {e}"}), 500
+
+    with _video_label_lock:
+        if _video_label_state.get("status") == "running":
+            return jsonify({"ok": False, "error": "a video auto-label job is already running"}), 409
+
+    f = request.files.get("video")
+    if not f or not f.filename:
+        return jsonify({"ok": False, "error": "video file required"}), 400
+    ext = Path(f.filename).suffix.lower()
+    if ext not in VIDEO_EXT:
+        return jsonify({"ok": False, "error": f"unsupported video type: {ext}"}), 400
+
+    class_name = (request.form.get("class_name") or "object").strip() or "object"
+    split = request.form.get("split", "train")
+    if split not in ("train", "val", "test"):
+        split = "train"
+    try:
+        conf = float(request.form.get("conf", 0.25))
+        iou = float(request.form.get("iou", 0.45))
+        every_n = max(1, int(request.form.get("every_n_frames", 10)))
+        max_frames = int(request.form.get("max_frames", 0)) or None
+    except (TypeError, ValueError):
+        conf, iou, every_n, max_frames = 0.25, 0.45, 10, None
+    save_empty = str(request.form.get("save_empty", "")).lower() in ("1", "true", "on")
+    model_path = _resolve_training_model(request.form.get("model") or "best.pt")
+
+    upload_dir = DATASET / "_uploads" / "videos"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = f"{int(time.time())}_{Path(f.filename).name.replace(' ', '_')}"
+    video_path = upload_dir / safe_name
+    f.save(str(video_path))
+
+    img_dest = _safe_path(DATASET, f"auto_improve/images/{split}/{class_name}")
+    # Mirror the images/<split>/<class> path under labels/ — matches
+    # ultralytics.data.utils.img2label_paths()'s lookup convention. A sibling
+    # "images/<split>/labels" folder (the old behavior here) is never found.
+    label_dest = _safe_path(DATASET, f"auto_improve/labels/{split}/{class_name}")
+    img_dest.mkdir(parents=True, exist_ok=True)
+    label_dest.mkdir(parents=True, exist_ok=True)
+
+    _set_video_label_state(
+        status="running", progress=0, frame_index=0, total_frames=0,
+        frames_saved=0, detections=0, error=None, cancel=False,
+        video=f.filename, started=time.time(), finished=None,
+        log=f"Loading model {model_path}",
+    )
+
+    def worker():
+        cap = None
+        try:
+            model = YOLO(model_path)
+            cap = cv2.VideoCapture(str(video_path))
+            if not cap.isOpened():
+                raise RuntimeError("cannot open uploaded video")
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+            _set_video_label_state(total_frames=total, log="Processing frames...")
+
+            frame_idx = 0
+            saved = 0
+            detections_total = 0
+            stem_prefix = Path(f.filename).stem
+
+            while True:
+                if _video_label_snapshot().get("cancel"):
+                    _set_video_label_state(status="cancelled", finished=time.time(), log="Cancelled by user")
+                    return
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                if frame_idx % every_n == 0:
+                    results = model.predict(source=frame, conf=conf, iou=iou, verbose=False)
+                    lines = _yolo_txt_lines(results)
+                    if lines or save_empty:
+                        frame_name = f"{stem_prefix}_f{frame_idx:06d}.jpg"
+                        cv2.imwrite(str(img_dest / frame_name), frame)
+                        (label_dest / f"{Path(frame_name).stem}.txt").write_text(
+                            "\n".join(lines) + ("\n" if lines else ""))
+                        saved += 1
+                        detections_total += len(lines)
+                frame_idx += 1
+                if max_frames and frame_idx >= max_frames:
+                    break
+                if frame_idx % 5 == 0:
+                    progress = min(99, int(frame_idx / total * 100)) if total else 0
+                    _set_video_label_state(
+                        frame_index=frame_idx, frames_saved=saved,
+                        detections=detections_total, progress=progress,
+                    )
+
+            _set_video_label_state(
+                status="completed", progress=100, frame_index=frame_idx,
+                frames_saved=saved, detections=detections_total,
+                finished=time.time(),
+                log=f"Done: {saved} frames saved with {detections_total} detections",
+                dest=str(img_dest.relative_to(DATASET)).replace("\\", "/"),
+            )
+        except Exception as e:
+            _set_video_label_state(
+                status="error", error=str(e), finished=time.time(),
+                log=traceback.format_exc(),
+            )
+        finally:
+            if cap is not None:
+                cap.release()
+            try:
+                video_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    threading.Thread(target=worker, daemon=True).start()
+    return jsonify({"ok": True, "status": "running"})
+
+
+@app.route("/api/video/autolabel/status")
+def api_video_autolabel_status():
+    return jsonify(_video_label_snapshot())
+
+
+@app.route("/api/video/autolabel/cancel", methods=["POST"])
+def api_video_autolabel_cancel():
+    _set_video_label_state(cancel=True)
+    return jsonify({"ok": True})
 
 
 # ── API: Label Studio Proxy ──────────────────────────────────────────
