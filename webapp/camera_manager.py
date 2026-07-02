@@ -94,10 +94,10 @@ class FrameBuffer:
 class CameraThread(threading.Thread):
     """เธรดสำหรับกล้อง 1 ตัว — จับภาพ + inference + ส่ง SSE"""
 
-    def __init__(self, config: CameraConfig):
+    def __init__(self, config: CameraConfig, camera_id: Optional[int] = None):
         super().__init__(daemon=True)
         self.config = config
-        self.camera_id = _new_camera_id()
+        self.camera_id = camera_id if camera_id is not None else _new_camera_id()
         self.state = CameraState(
             id=self.camera_id,
             status="idle",
@@ -186,29 +186,33 @@ class CameraThread(threading.Thread):
 
             reconnect_delay = 0
 
-            # Resize ถ้าจำเป็น
-            if frame.shape[1] != self.config.width or frame.shape[0] != self.config.height:
-                frame = cv2.resize(frame, (self.config.width, self.config.height))
+            try:
+                # Resize ถ้าจำเป็น
+                if frame.shape[1] != self.config.width or frame.shape[0] != self.config.height:
+                    frame = cv2.resize(frame, (self.config.width, self.config.height))
 
-            # ใส่ Frame buffer
-            self._frame_buffer.put(frame)
-            frame_count += 1
-            self._frame_counter += 1
+                # ใส่ Frame buffer
+                self._frame_buffer.put(frame)
+                frame_count += 1
+                self._frame_counter += 1
 
-            # FPS counter
-            elapsed = time.time() - fps_start
-            if elapsed >= 2.0:
-                self.state.fps = frame_count / elapsed
-                self.state.frame_count += frame_count
-                frame_count = 0
-                fps_start = time.time()
+                # FPS counter
+                elapsed = time.time() - fps_start
+                if elapsed >= 2.0:
+                    self.state.fps = frame_count / elapsed
+                    self.state.frame_count += frame_count
+                    frame_count = 0
+                    fps_start = time.time()
 
-            # Broadcast frame ไป SSE clients
-            self._broadcast_frame(frame)
+                # Broadcast frame ไป SSE clients
+                self._broadcast_frame(frame)
 
-            # Run inference ทุก N frames
-            if self._frame_counter % self.config.inference_every_n == 0:
-                self._run_inference(frame, _resolve_training_model)
+                # Run inference ทุก N frames
+                if self._frame_counter % self.config.inference_every_n == 0:
+                    self._run_inference(frame, _resolve_training_model)
+            except Exception as e:
+                # เฟรมเสียเฟรมเดียวไม่ควรทำให้ทั้ง thread ตาย — ข้ามแล้วไปต่อ
+                self.state.error = f"Frame processing error: {e}"
 
             # Target FPS control
             target_interval = 1.0 / self.config.fps_target
@@ -224,7 +228,7 @@ class CameraThread(threading.Thread):
         model_ref = self.config.model_path or ""
         if not model_ref:
             try:
-                model_ref = resolve_model("")
+                model_ref = resolve_model("best.pt")
             except Exception:
                 model_ref = ""
         if not model_ref:
@@ -366,6 +370,19 @@ class CameraManager:
             thread = self._cameras.pop(camera_id, None)
         if thread:
             thread.stop()
+
+    def restart_camera(self, camera_id: int) -> bool:
+        """เริ่มกล้องที่หยุด/error ใหม่ โดยใช้ config เดิมและ camera_id เดิม
+        (Thread เดิมจบไปแล้วจึง start ซ้ำไม่ได้ ต้องสร้าง Thread ใหม่)"""
+        with self._lock:
+            old = self._cameras.get(camera_id)
+            if old is None:
+                return False
+            new_thread = CameraThread(old.config, camera_id=camera_id)
+            self._cameras[camera_id] = new_thread
+        old.stop()
+        new_thread.start()
+        return True
 
     def get_camera(self, camera_id: int) -> Optional[CameraThread]:
         with self._lock:

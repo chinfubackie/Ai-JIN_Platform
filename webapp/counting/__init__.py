@@ -240,6 +240,9 @@ class CountingEngine:
             matched_dets = set()
             updated_tracks = {}
             
+            used_tracks = set()
+            used_dets = set()
+
             if self._active_tracks:
                 # Build cost matrix (IoU)
                 track_ids = list(self._active_tracks.keys())
@@ -248,10 +251,8 @@ class CountingEngine:
                     track = self._active_tracks[tid]
                     for di, det in enumerate(dets):
                         costs[ti, di] = _iou(track.bbox, det.bbox)
-                
+
                 # Greedy matching (simpler than Hungarian for small # of objects)
-                used_tracks = set()
-                used_dets = set()
                 for _ in range(min(len(track_ids), len(dets))):
                     max_iou = self.track_iou_threshold
                     best_t = -1

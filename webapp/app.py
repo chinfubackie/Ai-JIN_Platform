@@ -2238,6 +2238,7 @@ def api_lm_chat_stream():
 # ── API: Camera & Counting ───────────────────────────────────────────
 def _camera_available():
     try:
+        import cv2  # noqa: F401
         from camera_manager import camera_manager
         return True
     except Exception:
@@ -2300,14 +2301,19 @@ def api_camera_remove(camera_id):
 
 @app.route("/api/cameras/<int:camera_id>/start", methods=["POST"])
 def api_camera_start(camera_id):
-    """CameraThread auto-starts on creation; this is a no-op kept for
-    frontend compatibility.  If the camera errored, remove and re-add."""
+    """CameraThread auto-starts on creation. If it's already running this is
+    a no-op; if it has stopped or errored out, spin up a fresh thread with
+    the same config so the camera can be restarted from the UI."""
     if not _camera_available():
         return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
     cm = _get_camera_manager()
     cam = cm.get_camera(camera_id)
     if not cam:
         return jsonify({"ok": False, "error": "camera not found"}), 404
+    if cam.state.status in ("streaming", "connecting"):
+        return jsonify({"ok": True, "status": cam.state.status})
+    cm.restart_camera(camera_id)
+    cam = cm.get_camera(camera_id)
     return jsonify({"ok": True, "status": cam.state.status})
 
 

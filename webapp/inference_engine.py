@@ -1,38 +1,35 @@
 """
 Inference Engine — shared YOLO model wrapper for camera streams
 
-Multiple camera threads share one active model to avoid excessive GPU
-memory consumption.  Model is (re)loaded only when the requested path
-differs from the cached one.
+Multiple camera threads share cached model instances, keyed by model
+path, to avoid excessive GPU memory consumption. A model is loaded once
+per distinct path and reused by every camera that references it.
 """
 import threading
-from typing import Optional
 
 
 class _SharedModel:
-    """Internal singleton — single YOLO instance shared across cameras."""
+    """Internal singleton — caches one YOLO instance per model path."""
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._model = None
-        self._path: Optional[str] = None
+        self._models: dict = {}
 
     def predict(self, frame, model_path: str, conf=0.25, iou=0.45, imgsz=640):
         from ultralytics import YOLO
 
         with self._lock:
-            if self._path != model_path:
-                self._model = YOLO(model_path)
-                self._path = model_path
-            model = self._model
+            model = self._models.get(model_path)
+            if model is None:
+                model = YOLO(model_path)
+                self._models[model_path] = model
         return model.predict(
             frame, conf=conf, iou=iou, imgsz=imgsz, verbose=False
         )
 
     def unload(self):
         with self._lock:
-            self._model = None
-            self._path = None
+            self._models.clear()
 
 
 _shared = _SharedModel()
