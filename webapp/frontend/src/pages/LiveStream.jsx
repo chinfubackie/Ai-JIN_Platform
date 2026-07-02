@@ -159,7 +159,7 @@ export default function LiveStream() {
   const selectedCamData = cameras.find(c => c.id === selectedCamera?.id)
 
   return (
-    <div>
+    <div className="live-stream-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Camera</h1>
@@ -357,7 +357,7 @@ export default function LiveStream() {
           </div>
 
           {/* Quick Actions */}
-          <div className="card" style={{ marginTop: 16 }}>
+          <div className="card stats-actions-card">
             <div className="card-title"><Settings size={18} /> ตั้งค่าโซนนับ</div>
             <div className="quick-actions">
               <button className="btn btn-outline btn-sm" disabled>

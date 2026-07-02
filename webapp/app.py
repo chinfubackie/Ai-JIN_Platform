@@ -495,7 +495,7 @@ def index():
 
 SPA_ROUTES = {
     "dashboard", "demo", "dataset", "annotator", "import", "training",
-    "models", "api-docs", "projects", "settings", "team",
+    "models", "api-docs", "projects", "settings", "team", "cameras",
 }
 
 

@@ -637,12 +637,19 @@ body {
   margin-left: var(--sidebar-collapsed-w);
 }
 /* Full-bleed pages that manage their own layout */
-.main-content:has(.ann-page) {
+.main-content:has(.ann-page),
+.main-content:has(.live-stream-page) {
   padding: 0;
   height: calc(100vh - var(--topbar-h));
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+@media (max-width: 1100px) {
+  .main-content:has(.live-stream-page) {
+    height: auto;
+    overflow: visible;
+  }
 }
 
 /* ===================================================
