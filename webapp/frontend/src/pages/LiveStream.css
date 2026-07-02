@@ -41,12 +41,20 @@
     max-height: 320px;
   }
   .stream-container,
+  .stream-video-wrap,
   .stream-placeholder,
   .stream-video,
   .stream-error,
   .stream-idle,
   .stream-loading {
     flex: none;
+  }
+  .stream-video-wrap,
+  .stream-video,
+  .stream-error,
+  .stream-idle,
+  .stream-loading {
+    min-height: 280px;
   }
 }
 
@@ -290,6 +298,14 @@
   min-height: 0;
 }
 
+.stream-video-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .stream-video {
   display: block;
   width: 100%;
@@ -317,6 +333,63 @@
   color: var(--text-muted);
   flex: 1;
   min-height: 200px;
+}
+
+.zone-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.zone-shape {
+  fill: rgba(6, 182, 212, 0.15);
+  stroke: var(--cyan);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.line-shape {
+  stroke: var(--yellow);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.draft-shape {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.draft-point {
+  fill: var(--accent);
+}
+
+.draft-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: rgba(10, 11, 20, 0.9);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.draft-toolbar input,
+.draft-toolbar select {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
 .stream-error {
@@ -453,6 +526,45 @@
   color: var(--text-muted);
   margin-top: 10px;
   text-align: center;
+}
+
+.shape-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.shape-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.shape-chip span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shape-chip button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.shape-chip button:hover {
+  color: var(--red);
 }
 
 /* ── Error bar ── */

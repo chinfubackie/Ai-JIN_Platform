@@ -127,6 +127,23 @@ export const api = {
   countingStats: (camId) => fetchJSON(`/counting/${camId}`),
   countingReset: (camId) =>
     fetchJSON(`/counting/${camId}/reset`, { method: 'POST' }),
+  countingConfig: (camId) => fetchJSON(`/counting/${camId}/config`),
+  countingAddZone: (camId, data) =>
+    fetchJSON(`/counting/${camId}/zones`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  countingRemoveZone: (camId, zoneId) =>
+    fetchJSON(`/counting/${camId}/zones/${zoneId}`, { method: 'DELETE' }),
+  countingAddLine: (camId, data) =>
+    fetchJSON(`/counting/${camId}/lines`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  countingRemoveLine: (camId, lineId) =>
+    fetchJSON(`/counting/${camId}/lines/${lineId}`, { method: 'DELETE' }),
 
   // ── Database / Projects ──
   dbStats: () => fetchJSON('/db/stats'),

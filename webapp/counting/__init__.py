@@ -175,18 +175,26 @@ class CountingEngine:
     def add_zone(self, zone: Zone):
         with self._lock:
             self.zones[zone.id] = zone
-    
+
     def remove_zone(self, zone_id: str):
         with self._lock:
             self.zones.pop(zone_id, None)
-    
+
+    def list_zones(self) -> list:
+        with self._lock:
+            return [asdict(z) for z in self.zones.values()]
+
     def add_line(self, line: CountingLine):
         with self._lock:
             self.lines[line.id] = line
-    
+
     def remove_line(self, line_id: str):
         with self._lock:
             self.lines.pop(line_id, None)
+
+    def list_lines(self) -> list:
+        with self._lock:
+            return [asdict(l) for l in self.lines.values()]
     
     def set_tracking_params(self, iou_thresh=None, max_age=None, min_hit=None):
         with self._lock:

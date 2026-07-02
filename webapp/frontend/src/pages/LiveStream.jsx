@@ -69,6 +69,10 @@ export default function LiveStream() {
   const [streamUrl, setStreamUrl] = useState(null)
   const [countStats, setCountStats] = useState(null)
 
+  const [zones, setZones] = useState([])
+  const [lines, setLines] = useState([])
+  const [draftShape, setDraftShape] = useState(null) // {type:'zone'|'line', points:[[x,y],...], name, direction}
+
   const loadCameras = useCallback(async () => {
     try {
       const res = await api.cameras()
@@ -81,6 +85,24 @@ export default function LiveStream() {
   }, [])
 
   useEffect(() => { loadCameras() }, [loadCameras])
+
+  // Zone/line config for selected camera
+  const loadCountingConfig = useCallback(async (camId) => {
+    if (!camId) { setZones([]); setLines([]); return }
+    try {
+      const res = await api.countingConfig(camId)
+      setZones(res.zones || [])
+      setLines(res.lines || [])
+    } catch {
+      setZones([])
+      setLines([])
+    }
+  }, [])
+
+  useEffect(() => {
+    setDraftShape(null)
+    loadCountingConfig(selectedCamera?.id)
+  }, [selectedCamera, loadCountingConfig])
 
   // SSE stream
   useEffect(() => {
@@ -157,6 +179,85 @@ export default function LiveStream() {
   }
 
   const selectedCamData = cameras.find(c => c.id === selectedCamera?.id)
+  const canDraw = selectedCamData?.status === 'streaming'
+
+  // Zone/line drawing
+  const handleOverlayClick = (e) => {
+    if (!draftShape) return
+    if (draftShape.type === 'line' && draftShape.points.length >= 2) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1)
+    const y = Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 1)
+    setDraftShape(d => ({ ...d, points: [...d.points, [x, y]] }))
+  }
+
+  const toggleDraw = (type) => {
+    if (!canDraw) return
+    setDraftShape(d => (d?.type === type ? null : { type, points: [], name: '', direction: 'both' }))
+  }
+
+  const saveDraftShape = async () => {
+    if (!draftShape || !selectedCamData) return
+    try {
+      if (draftShape.type === 'zone') {
+        if (draftShape.points.length < 3) return
+        await api.countingAddZone(selectedCamData.id, {
+          name: draftShape.name.trim() || 'Zone',
+          points: draftShape.points,
+        })
+      } else {
+        if (draftShape.points.length !== 2) return
+        const [[x1, y1], [x2, y2]] = draftShape.points
+        await api.countingAddLine(selectedCamData.id, {
+          name: draftShape.name.trim() || 'Line',
+          x1, y1, x2, y2,
+          direction: draftShape.direction || 'both',
+        })
+      }
+      setDraftShape(null)
+      await loadCountingConfig(selectedCamData.id)
+    } catch (err) {
+      setError('ไม่สามารถบันทึกการตั้งค่าโซน/เส้นนับได้')
+    }
+  }
+
+  const handleRemoveZone = async (zoneId) => {
+    if (!selectedCamData) return
+    try {
+      await api.countingRemoveZone(selectedCamData.id, zoneId)
+      await loadCountingConfig(selectedCamData.id)
+    } catch {
+      setError('ไม่สามารถลบโซนนับได้')
+    }
+  }
+
+  const handleRemoveLine = async (lineId) => {
+    if (!selectedCamData) return
+    try {
+      await api.countingRemoveLine(selectedCamData.id, lineId)
+      await loadCountingConfig(selectedCamData.id)
+    } catch {
+      setError('ไม่สามารถลบเส้นนับได้')
+    }
+  }
+
+  const handleExportStats = () => {
+    if (!countStats) return
+    const blob = new Blob([JSON.stringify(countStats, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `counting-stats-cam${selectedCamData?.id ?? ''}-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const zoneName = (id) => zones.find(z => z.id === id)?.name || id
+  const lineName = (id) => lines.find(l => l.id === id)?.name || id
+  const shapeReady = draftShape && (
+    (draftShape.type === 'zone' && draftShape.points.length >= 3) ||
+    (draftShape.type === 'line' && draftShape.points.length === 2)
+  )
 
   return (
     <div className="live-stream-page">
@@ -267,30 +368,100 @@ export default function LiveStream() {
 
             {selectedCamData ? (
               <div className="stream-container">
-                {selectedCamData.status === 'streaming' ? (
-                  <>
-                    <VideoPlayer streamUrl={streamUrl} />
-                    {!streamUrl && (
-                      <div className="stream-loading">กำลังเชื่อมต่อสตรีม...</div>
+                <div className="stream-video-wrap">
+                  {selectedCamData.status === 'streaming' ? (
+                    <>
+                      <VideoPlayer streamUrl={streamUrl} />
+                      {!streamUrl && (
+                        <div className="stream-loading">กำลังเชื่อมต่อสตรีม...</div>
+                      )}
+                    </>
+                  ) : selectedCamData.status === 'error' ? (
+                    <div className="stream-error">
+                      <AlertCircle size={32} />
+                      <span>{selectedCamData.error || 'เกิดข้อผิดพลาด'}</span>
+                      <button className="btn btn-outline" onClick={() => handleStart(selectedCamData.id)}>
+                        <RefreshCw size={14} /> ลองใหม่
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="stream-idle">
+                      <Camera size={48} />
+                      <span>กล้องพร้อมใช้งาน กดเปิดเพื่อเริ่ม</span>
+                      <button className="btn btn-primary" onClick={() => handleStart(selectedCamData.id)}>
+                        <Play size={14} /> เปิดสตรีม
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Zone/line overlay */}
+                  <svg
+                    className="zone-overlay"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    onClick={handleOverlayClick}
+                    style={{ pointerEvents: draftShape ? 'auto' : 'none', cursor: draftShape ? 'crosshair' : 'default' }}
+                  >
+                    {zones.map(z => (
+                      <polygon
+                        key={z.id}
+                        className="zone-shape"
+                        points={z.points.map(p => `${p[0] * 100},${p[1] * 100}`).join(' ')}
+                      />
+                    ))}
+                    {lines.map(l => (
+                      <line
+                        key={l.id}
+                        className="line-shape"
+                        x1={l.x1 * 100} y1={l.y1 * 100} x2={l.x2 * 100} y2={l.y2 * 100}
+                      />
+                    ))}
+                    {draftShape?.points.length > 0 && (
+                      <polyline
+                        className="draft-shape"
+                        points={draftShape.points.map(p => `${p[0] * 100},${p[1] * 100}`).join(' ')}
+                      />
                     )}
-                  </>
-                ) : selectedCamData.status === 'error' ? (
-                  <div className="stream-error">
-                    <AlertCircle size={32} />
-                    <span>{selectedCamData.error || 'เกิดข้อผิดพลาด'}</span>
-                    <button className="btn btn-outline" onClick={() => handleStart(selectedCamData.id)}>
-                      <RefreshCw size={14} /> ลองใหม่
-                    </button>
-                  </div>
-                ) : (
-                  <div className="stream-idle">
-                    <Camera size={48} />
-                    <span>กล้องพร้อมใช้งาน กดเปิดเพื่อเริ่ม</span>
-                    <button className="btn btn-primary" onClick={() => handleStart(selectedCamData.id)}>
-                      <Play size={14} /> เปิดสตรีม
-                    </button>
-                  </div>
-                )}
+                    {draftShape?.points.map((p, i) => (
+                      <circle key={i} className="draft-point" cx={p[0] * 100} cy={p[1] * 100} r="1" />
+                    ))}
+                  </svg>
+
+                  {/* Draft shape toolbar */}
+                  {draftShape && (
+                    <div className="draft-toolbar">
+                      <span>
+                        {draftShape.type === 'zone'
+                          ? `กำลังวาดโซน (${draftShape.points.length} จุด, อย่างน้อย 3)`
+                          : `กำลังวาดเส้นนับ (${draftShape.points.length}/2 จุด)`}
+                      </span>
+                      {shapeReady && (
+                        <>
+                          <input
+                            type="text"
+                            placeholder="ชื่อ เช่น BIN_A"
+                            value={draftShape.name}
+                            onChange={e => setDraftShape(d => ({ ...d, name: e.target.value }))}
+                          />
+                          {draftShape.type === 'line' && (
+                            <select
+                              value={draftShape.direction}
+                              onChange={e => setDraftShape(d => ({ ...d, direction: e.target.value }))}
+                            >
+                              <option value="both">ทั้งสองทิศทาง</option>
+                              <option value="left_to_right">ซ้าย → ขวา</option>
+                              <option value="right_to_left">ขวา → ซ้าย</option>
+                              <option value="top_to_bottom">บน → ล่าง</option>
+                              <option value="bottom_to_top">ล่าง → บน</option>
+                            </select>
+                          )}
+                          <button className="btn btn-primary btn-sm" onClick={saveDraftShape}>บันทึก</button>
+                        </>
+                      )}
+                      <button className="btn btn-outline btn-sm" onClick={() => setDraftShape(null)}>ยกเลิก</button>
+                    </div>
+                  )}
+                </div>
 
                 {/* Stream Info Bar */}
                 {selectedCamData && (
@@ -333,7 +504,7 @@ export default function LiveStream() {
                     <div className="count-section-title"><Target size={14} /> โซน</div>
                     {Object.entries(countStats.zone_counts).map(([zone, cnt]) => (
                       <div key={zone} className="count-item">
-                        <span className="count-label">{zone}</span>
+                        <span className="count-label">{zoneName(zone)}</span>
                         <span className="count-value">{cnt}</span>
                       </div>
                     ))}
@@ -344,7 +515,7 @@ export default function LiveStream() {
                     <div className="count-section-title"><SquareStack size={14} /> เส้นนับ</div>
                     {Object.entries(countStats.line_counts).map(([line, cnt]) => (
                       <div key={line} className="count-item">
-                        <span className="count-label">{line}</span>
+                        <span className="count-label">{lineName(line)}</span>
                         <span className="count-value">{cnt}</span>
                       </div>
                     ))}
@@ -360,17 +531,45 @@ export default function LiveStream() {
           <div className="card stats-actions-card">
             <div className="card-title"><Settings size={18} /> ตั้งค่าโซนนับ</div>
             <div className="quick-actions">
-              <button className="btn btn-outline btn-sm" disabled>
-                <Target size={14} /> โซนนับ
+              <button
+                className={`btn btn-sm ${draftShape?.type === 'zone' ? 'btn-primary' : 'btn-outline'}`}
+                disabled={!canDraw}
+                onClick={() => toggleDraw('zone')}
+              >
+                <Target size={14} /> {draftShape?.type === 'zone' ? 'ยกเลิกวาดโซน' : 'โซนนับ'}
               </button>
-              <button className="btn btn-outline btn-sm" disabled>
-                <SquareStack size={14} /> เส้นนับ
+              <button
+                className={`btn btn-sm ${draftShape?.type === 'line' ? 'btn-primary' : 'btn-outline'}`}
+                disabled={!canDraw}
+                onClick={() => toggleDraw('line')}
+              >
+                <SquareStack size={14} /> {draftShape?.type === 'line' ? 'ยกเลิกวาดเส้น' : 'เส้นนับ'}
               </button>
-              <button className="btn btn-outline btn-sm" disabled>
+              <button className="btn btn-outline btn-sm" disabled={!countStats} onClick={handleExportStats}>
                 <Download size={14} /> Export
               </button>
             </div>
-            <div className="stats-hint">โซนนับและเส้นนับจะเปิดใน Phase ถัดไป</div>
+            {(zones.length > 0 || lines.length > 0) && (
+              <div className="shape-list">
+                {zones.map(z => (
+                  <div key={z.id} className="shape-chip">
+                    <Target size={12} />
+                    <span>{z.name || z.id}</span>
+                    <button onClick={() => handleRemoveZone(z.id)} title="ลบโซนนี้">✕</button>
+                  </div>
+                ))}
+                {lines.map(l => (
+                  <div key={l.id} className="shape-chip">
+                    <SquareStack size={12} />
+                    <span>{l.name || l.id}</span>
+                    <button onClick={() => handleRemoveLine(l.id)} title="ลบเส้นนี้">✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="stats-hint">
+              {canDraw ? 'กดปุ่มด้านบนแล้วคลิกบนวิดีโอเพื่อวาดโซน/เส้นนับ' : 'เปิดสตรีมกล้องก่อนจึงจะวาดโซน/เส้นนับได้'}
+            </div>
           </div>
         </div>
       </div>

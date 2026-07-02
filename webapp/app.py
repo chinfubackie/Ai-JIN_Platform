@@ -13,6 +13,8 @@ import threading
 import traceback
 import urllib.parse
 import urllib.request
+import uuid
+from dataclasses import asdict
 from pathlib import Path
 import db as _db
 
@@ -2366,6 +2368,96 @@ def api_counting_reset(cam_id):
     engine = cam.get_counting_engine()
     if engine:
         engine.reset_counts()
+    return jsonify({"ok": True})
+
+
+def _get_counting_engine_or_none(cam_id):
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if not cam:
+        return None, jsonify({"ok": False, "error": "camera not found"}), 404
+    engine = cam.get_counting_engine()
+    if not engine:
+        return None, jsonify({"ok": False, "error": "counting engine not ready"}), 503
+    return engine, None, None
+
+
+@app.route("/api/counting/<int:cam_id>/config")
+def api_counting_config(cam_id):
+    if not _camera_available():
+        return jsonify({"error": "opencv-python not installed"}), 501
+    engine, err, code = _get_counting_engine_or_none(cam_id)
+    if engine is None:
+        return err, code
+    return jsonify({"zones": engine.list_zones(), "lines": engine.list_lines()})
+
+
+@app.route("/api/counting/<int:cam_id>/zones", methods=["POST"])
+def api_counting_add_zone(cam_id):
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    engine, err, code = _get_counting_engine_or_none(cam_id)
+    if engine is None:
+        return err, code
+    data = request.json or {}
+    points = data.get("points") or []
+    if len(points) < 3:
+        return jsonify({"ok": False, "error": "โซนต้องมีอย่างน้อย 3 จุด"}), 400
+    from counting import Zone
+    zone = Zone(
+        id=uuid.uuid4().hex[:8],
+        name=data.get("name", ""),
+        points=points,
+        label=data.get("label", ""),
+    )
+    engine.add_zone(zone)
+    return jsonify({"ok": True, "zone": asdict(zone)})
+
+
+@app.route("/api/counting/<int:cam_id>/zones/<zone_id>", methods=["DELETE"])
+def api_counting_remove_zone(cam_id, zone_id):
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    engine, err, code = _get_counting_engine_or_none(cam_id)
+    if engine is None:
+        return err, code
+    engine.remove_zone(zone_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/counting/<int:cam_id>/lines", methods=["POST"])
+def api_counting_add_line(cam_id):
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    engine, err, code = _get_counting_engine_or_none(cam_id)
+    if engine is None:
+        return err, code
+    data = request.json or {}
+    required = ("x1", "y1", "x2", "y2")
+    if not all(k in data for k in required):
+        return jsonify({"ok": False, "error": "ต้องระบุจุดเริ่มต้นและจุดสิ้นสุดของเส้น"}), 400
+    from counting import CountingLine
+    line = CountingLine(
+        id=uuid.uuid4().hex[:8],
+        name=data.get("name", ""),
+        x1=float(data["x1"]),
+        y1=float(data["y1"]),
+        x2=float(data["x2"]),
+        y2=float(data["y2"]),
+        direction=data.get("direction", "both"),
+    )
+    engine.add_line(line)
+    return jsonify({"ok": True, "line": asdict(line)})
+
+
+@app.route("/api/counting/<int:cam_id>/lines/<line_id>", methods=["DELETE"])
+def api_counting_remove_line(cam_id, line_id):
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    engine, err, code = _get_counting_engine_or_none(cam_id)
+    if engine is None:
+        return err, code
+    engine.remove_line(line_id)
     return jsonify({"ok": True})
 
 
