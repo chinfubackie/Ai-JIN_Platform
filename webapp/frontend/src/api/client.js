@@ -124,6 +124,17 @@ export const api = {
   cameraStop: (id) =>
     fetchJSON(`/cameras/${id}/stop`, { method: 'POST' }),
   cameraStatus: (id) => fetchJSON(`/cameras/${id}`),
+  cameraAddBrowser: (data) =>
+    fetchJSON('/cameras/browser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  cameraBrowserFrame: (id, blob) => {
+    const form = new FormData()
+    form.append('frame', blob, 'frame.jpg')
+    return fetchJSON(`/cameras/browser/${id}/frame`, { method: 'POST', body: form })
+  },
   countingStats: (camId) => fetchJSON(`/counting/${camId}`),
   countingReset: (camId) =>
     fetchJSON(`/counting/${camId}/reset`, { method: 'POST' }),

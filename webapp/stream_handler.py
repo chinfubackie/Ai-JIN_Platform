@@ -29,5 +29,10 @@ def camera_sse_stream(camera_thread):
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
+            # The frontend may load this from a dedicated streaming port
+            # (STREAM_PORT) distinct from the main API port, which browsers
+            # treat as a separate origin — allow it, since this endpoint
+            # carries no cookies/credentials.
+            "Access-Control-Allow-Origin": "*",
         },
     )

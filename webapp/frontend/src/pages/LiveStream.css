@@ -63,6 +63,12 @@
   margin-bottom: 16px;
 }
 
+.add-cam-mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .add-cam-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

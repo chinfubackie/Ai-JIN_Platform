@@ -39,6 +39,10 @@ VIDEO_EXT = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 MAX_IMPORT_BATCH = 1500
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.93:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llava")
+# Optional dedicated port for camera SSE/video streaming, so a busy stream
+# doesn't need to share the same listen socket as regular API traffic.
+# Empty means "same origin/port as the rest of the app" (no change).
+STREAM_PORT = os.getenv("STREAM_PORT", "")
 SAM3_INSTALL_HINT = (
     "ultralytics>=8.4 already ships a native SAM3 implementation "
     "(ultralytics.models.sam.SAM3SemanticPredictor) — no separate package/repo "
@@ -524,6 +528,7 @@ def get_config():
         "model_dir": _runtime_cfg.get("model_dir", str(MODEL_DIR)),
         "yolo_url": _runtime_cfg.get("yolo_url", YOLO_URL),
         "runs_path": str(RUNS),
+        "stream_port": STREAM_PORT,
     })
 
 
@@ -2281,6 +2286,48 @@ def api_camera_add():
     return jsonify({"ok": True, "id": cam_id})
 
 
+@app.route("/api/cameras/browser", methods=["POST"])
+def api_camera_add_browser():
+    """สร้าง 'กล้อง' ที่รับเฟรมจากเบราว์เซอร์ของผู้ใช้เอง (getUserMedia)
+    แทนกล้องที่ต่อกับเซิร์ฟเวอร์ — เฟรมจะถูก push เข้ามาทาง
+    /api/cameras/browser/<id>/frame แทนที่จะให้เซิร์ฟเวอร์เปิดกล้องเอง."""
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    data = request.json or {}
+    cm = _get_camera_manager()
+    cam_id = cm.add_browser_session(
+        name=data.get("name", "").strip(),
+        conf_threshold=float(data.get("conf_threshold", 0.25)),
+        iou_threshold=float(data.get("iou_threshold", 0.45)),
+        model_path=data.get("model_path", ""),
+        imgsz=int(data.get("imgsz", 640)),
+        enable_counting=bool(data.get("enable_counting", True)),
+    )
+    return jsonify({"ok": True, "id": cam_id})
+
+
+@app.route("/api/cameras/browser/<int:cam_id>/frame", methods=["POST"])
+def api_camera_browser_frame(cam_id):
+    """รับเฟรมเดี่ยว (JPEG) จากเบราว์เซอร์ที่เปิดกล้องของเครื่องตัวเอง,
+    รัน inference + counting แล้วคืนผลลัพธ์กลับไปทันที (ไม่ผ่าน SSE)
+    เพื่อให้แท็บที่ถ่ายภาพวาด overlay ของตัวเองได้แบบ real-time; ผู้ชมคนอื่น
+    ที่เปิดดูกล้องนี้ยังคงได้ภาพผ่าน SSE stream ตามปกติ."""
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if not cam or not hasattr(cam, "process_frame"):
+        return jsonify({"ok": False, "error": "browser camera not found"}), 404
+    frame_file = request.files.get("frame")
+    if not frame_file:
+        return jsonify({"ok": False, "error": "ต้องแนบไฟล์ภาพในฟิลด์ 'frame'"}), 400
+    try:
+        result = cam.process_frame(frame_file.read(), _resolve_training_model)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True, **result})
+
+
 @app.route("/api/cameras/<int:camera_id>")
 def api_camera_status(camera_id):
     if not _camera_available():
@@ -2313,6 +2360,12 @@ def api_camera_start(camera_id):
     if not cam:
         return jsonify({"ok": False, "error": "camera not found"}), 404
     if cam.state.status in ("streaming", "connecting"):
+        return jsonify({"ok": True, "status": cam.state.status})
+    if hasattr(cam, "process_frame"):
+        # Browser-camera session: there's no server-side thread to restart —
+        # the browser resumes pushing frames on its own; just mark it ready.
+        cam.state.status = "streaming"
+        cam.state.error = ""
         return jsonify({"ok": True, "status": cam.state.status})
     cm.restart_camera(camera_id)
     cam = cm.get_camera(camera_id)

@@ -91,7 +91,53 @@ class FrameBuffer:
             return len(self._frames)
 
 
-class CameraThread(threading.Thread):
+class _SSEBroadcastMixin:
+    """ส่ง frame ไปยัง SSE subscribers — ใช้ร่วมกันระหว่าง CameraThread
+    (จับภาพเองฝั่งเซิร์ฟเวอร์) และ BrowserCameraSession (รับเฟรมจาก
+    เบราว์เซอร์ผ่าน HTTP POST) เพื่อให้ทั้งสองแบบใช้ /stream SSE เดียวกันได้"""
+
+    def _broadcast_frame(self, frame):
+        cv2 = self._cv2
+        with self._sse_lock:
+            if not self._sse_clients:
+                return
+            _, jpeg_data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            frame_b64 = jpeg_data.tobytes().hex()
+
+            msg = json.dumps({
+                "type": "frame",
+                "camera_id": self.camera_id,
+                "ts": time.time(),
+                "jpeg": frame_b64,
+            })
+
+            dead = []
+            for i, q in enumerate(self._sse_clients):
+                try:
+                    q.put_nowait(f"data: {msg}\n\n")
+                except queue.Full:
+                    dead.append(i)
+
+            for i in reversed(dead):
+                self._sse_clients.pop(i)
+
+    def subscribe_sse(self) -> queue.Queue:
+        """ลงทะเบียน SSE subscriber — คืน Queue สำหรับรับ data"""
+        q = queue.Queue(maxsize=60)
+        with self._sse_lock:
+            self._sse_clients.append(q)
+        return q
+
+    def unsubscribe_sse(self, q):
+        """ยกเลิก SSE subscriber"""
+        with self._sse_lock:
+            try:
+                self._sse_clients.remove(q)
+            except ValueError:
+                pass
+
+
+class CameraThread(_SSEBroadcastMixin, threading.Thread):
     """เธรดสำหรับกล้อง 1 ตัว — จับภาพ + inference + ส่ง SSE"""
 
     def __init__(self, config: CameraConfig, camera_id: Optional[int] = None):
@@ -267,32 +313,6 @@ class CameraThread(threading.Thread):
         except Exception as e:
             self.state.error = f"Inference error: {e}"
 
-    def _broadcast_frame(self, frame):
-        """ส่ง frame ไปยัง SSE subscribers (แบบ jpeg ประหยัด bandwidth)"""
-        cv2 = self._cv2
-        with self._sse_lock:
-            if not self._sse_clients:
-                return
-            _, jpeg_data = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
-            frame_b64 = jpeg_data.tobytes().hex()
-
-            msg = json.dumps({
-                "type": "frame",
-                "camera_id": self.camera_id,
-                "ts": time.time(),
-                "jpeg": frame_b64,
-            })
-
-            dead = []
-            for i, q in enumerate(self._sse_clients):
-                try:
-                    q.put_nowait(f"data: {msg}\n\n")
-                except queue.Full:
-                    dead.append(i)
-
-            for i in reversed(dead):
-                self._sse_clients.pop(i)
-
     def _broadcast_result(self, result_dict):
         """ส่ง inference result ไปยัง SSE subscribers (counting stats)"""
         with self._sse_lock:
@@ -318,21 +338,6 @@ class CameraThread(threading.Thread):
             for i in reversed(dead):
                 self._sse_clients.pop(i)
 
-    def subscribe_sse(self) -> queue.Queue:
-        """ลงทะเบียน SSE subscriber — คืน Queue สำหรับรับ data"""
-        q = queue.Queue(maxsize=60)
-        with self._sse_lock:
-            self._sse_clients.append(q)
-        return q
-
-    def unsubscribe_sse(self, q):
-        """ยกเลิก SSE subscriber"""
-        with self._sse_lock:
-            try:
-                self._sse_clients.remove(q)
-            except ValueError:
-                pass
-
     def stop(self):
         """หยุดกล้อง"""
         self._stop_event.set()
@@ -343,6 +348,143 @@ class CameraThread(threading.Thread):
 
     def get_status(self) -> dict:
         """ได้สถานะกล้องปัจจุบัน"""
+        return asdict(self.state)
+
+    def get_counting_engine(self):
+        return self._counting_engine
+
+
+class BrowserCameraSession(_SSEBroadcastMixin):
+    """กล้องที่รับเฟรมจากเบราว์เซอร์ของผู้ใช้เอง (getUserMedia) แทนที่จะเปิด
+    cv2.VideoCapture ที่ฝั่งเซิร์ฟเวอร์ — ใช้เมื่ออยากนับ/ตรวจจับด้วยกล้อง
+    ของเครื่องที่เปิดหน้าเว็บ ไม่ใช่กล้องที่ต่อกับเซิร์ฟเวอร์
+
+    เบราว์เซอร์ POST เฟรมมาเรื่อย ๆ ที่ /api/cameras/browser/<id>/frame —
+    ไม่มี capture loop ของตัวเอง (ไม่ใช่ Thread) เพราะไม่มีอะไรให้ pull;
+    ทุกอย่างขับเคลื่อนจากเฟรมที่ push เข้ามา แต่ยังคง broadcast ผ่าน SSE
+    เดียวกับ CameraThread เพื่อให้เครื่องอื่นดูสตรีมนี้ได้ด้วย"""
+
+    def __init__(self, name: str, camera_id: Optional[int] = None,
+                 conf_threshold: float = 0.25, iou_threshold: float = 0.45,
+                 model_path: str = "", imgsz: int = 640,
+                 enable_counting: bool = True):
+        self.camera_id = camera_id if camera_id is not None else _new_camera_id()
+        self.conf_threshold = conf_threshold
+        self.iou_threshold = iou_threshold
+        self.model_path = model_path
+        self.imgsz = imgsz
+        self.enable_counting = enable_counting
+
+        self.state = CameraState(
+            id=self.camera_id,
+            status="streaming",
+            source="browser",
+            name=name or f"Browser cam #{self.camera_id}",
+        )
+        self.state.uptime = time.time()
+
+        self._sse_clients: list[queue.Queue] = []
+        self._sse_lock = threading.Lock()
+        self._cv2 = None  # lazy import on first frame
+
+        self._frame_count = 0
+        self._fps_window_start = time.time()
+        self._fps_window_count = 0
+
+        from counting import CountingEngine
+        self._counting_engine = CountingEngine(self.camera_id)
+
+    def process_frame(self, jpeg_bytes: bytes, resolve_model) -> dict:
+        """ถอดรหัสเฟรม JPEG จากเบราว์เซอร์ -> inference -> counting -> broadcast"""
+        if self._cv2 is None:
+            import cv2
+            self._cv2 = cv2
+        cv2 = self._cv2
+
+        arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            raise ValueError("ไม่สามารถอ่านภาพที่ส่งมาได้")
+
+        self._frame_count += 1
+        self.state.frame_count = self._frame_count
+        self._fps_window_count += 1
+        elapsed = time.time() - self._fps_window_start
+        if elapsed >= 2.0:
+            self.state.fps = self._fps_window_count / elapsed
+            self._fps_window_count = 0
+            self._fps_window_start = time.time()
+
+        self._broadcast_frame(frame)
+
+        model_ref = self.model_path or ""
+        if not model_ref:
+            try:
+                model_ref = resolve_model("best.pt")
+            except Exception:
+                model_ref = ""
+        if not model_ref:
+            return {"detections": [], "counting": None}
+
+        try:
+            from inference_engine import predict
+            results = predict(
+                frame, model_ref, conf=self.conf_threshold,
+                iou=self.iou_threshold, imgsz=self.imgsz,
+            )
+            detections = []
+            for result in results:
+                for box, cls_id, conf_val in zip(result.boxes.xyxy, result.boxes.cls, result.boxes.conf):
+                    x1, y1, x2, y2 = box.tolist()
+                    detections.append({
+                        "class_id": int(cls_id.item()),
+                        "class_name": result.names.get(int(cls_id.item()), f"class_{int(cls_id.item())}"),
+                        "confidence": float(conf_val.item()),
+                        "bbox": [
+                            x1 / frame.shape[1],
+                            y1 / frame.shape[0],
+                            x2 / frame.shape[1],
+                            y2 / frame.shape[0],
+                        ],
+                    })
+
+            self.state.model = model_ref
+            self.state.detections = len(detections)
+            self.state.error = ""
+
+            counting_result = None
+            if self.enable_counting and detections:
+                counting_result = self._counting_engine.update(detections)
+                self._broadcast_result(counting_result)
+
+            return {"detections": detections, "counting": counting_result}
+        except Exception as e:
+            self.state.error = f"Inference error: {e}"
+            return {"detections": [], "counting": None, "error": self.state.error}
+
+    def _broadcast_result(self, result_dict):
+        with self._sse_lock:
+            if not self._sse_clients:
+                return
+            msg = json.dumps({
+                "type": "result",
+                "camera_id": self.camera_id,
+                "ts": time.time(),
+                **result_dict,
+            })
+            dead = []
+            for i, q in enumerate(self._sse_clients):
+                try:
+                    q.put_nowait(f"data: {msg}\n\n")
+                except queue.Full:
+                    dead.append(i)
+            for i in reversed(dead):
+                self._sse_clients.pop(i)
+
+    def stop(self):
+        self.state.status = "stopped"
+
+    def get_status(self) -> dict:
         return asdict(self.state)
 
     def get_counting_engine(self):
@@ -364,6 +506,13 @@ class CameraManager:
         thread.start()
         return thread.camera_id
 
+    def add_browser_session(self, **kwargs) -> int:
+        """เพิ่มกล้องที่รับเฟรมจากเบราว์เซอร์ (ไม่มี capture thread) — return camera_id"""
+        session = BrowserCameraSession(**kwargs)
+        with self._lock:
+            self._cameras[session.camera_id] = session
+        return session.camera_id
+
     def remove_camera(self, camera_id: int):
         """ลบกล้อง"""
         with self._lock:
@@ -373,10 +522,12 @@ class CameraManager:
 
     def restart_camera(self, camera_id: int) -> bool:
         """เริ่มกล้องที่หยุด/error ใหม่ โดยใช้ config เดิมและ camera_id เดิม
-        (Thread เดิมจบไปแล้วจึง start ซ้ำไม่ได้ ต้องสร้าง Thread ใหม่)"""
+        (Thread เดิมจบไปแล้วจึง start ซ้ำไม่ได้ ต้องสร้าง Thread ใหม่)
+        ใช้ได้กับกล้องแบบ CameraThread เท่านั้น — BrowserCameraSession ไม่มี
+        capture thread ให้ restart (ฝั่งเบราว์เซอร์เป็นคน push เฟรมเอง)"""
         with self._lock:
             old = self._cameras.get(camera_id)
-            if old is None:
+            if old is None or not isinstance(old, CameraThread):
                 return False
             new_thread = CameraThread(old.config, camera_id=camera_id)
             self._cameras[camera_id] = new_thread

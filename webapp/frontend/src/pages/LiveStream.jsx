@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Trash2, Play, Square, Camera, Settings, AlertCircle,
   CheckCircle2, Monitor, Wifi, WifiOff, RefreshCw, Download,
-  TrendingUp, Target, SquareStack,
+  TrendingUp, Target, SquareStack, Laptop,
 } from 'lucide-react'
 import VideoPlayer from '../components/VideoPlayer'
 import { api } from '../api/client'
@@ -20,11 +20,11 @@ function CameraCard({ cam, onRemove, onStart, onStop, onSelect }) {
     >
       <div className="cam-card-header">
         <div className="cam-card-icon">
-          {isOnline ? <Monitor size={20} /> : isError ? <WifiOff size={20} /> : <Camera size={20} />}
+          {cam.source === 'browser' ? <Laptop size={20} /> : isOnline ? <Monitor size={20} /> : isError ? <WifiOff size={20} /> : <Camera size={20} />}
         </div>
         <div className="cam-card-info">
           <div className="cam-card-name">{cam.name || `Cam #${cam.id}`}</div>
-          <div className="cam-card-source">{cam.source}</div>
+          <div className="cam-card-source">{cam.source === 'browser' ? 'กล้องเครื่องนี้ (เบราว์เซอร์)' : cam.source}</div>
         </div>
         <div className="cam-card-status-dot">
           {isOnline ? <CheckCircle2 size={14} /> : isError ? <AlertCircle size={14} /> : <Wifi size={14} />}
@@ -61,10 +61,18 @@ export default function LiveStream() {
   const [cameras, setCameras] = useState([])
   const [selectedCamera, setSelectedCamera] = useState(null)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [addMode, setAddMode] = useState('remote') // 'remote' (RTSP/USB บนเซิร์ฟเวอร์) | 'browser' (กล้องเครื่องนี้)
   const [newCamSource, setNewCamSource] = useState('')
   const [newCamName, setNewCamName] = useState('')
   const [newCamFps, setNewCamFps] = useState(15)
   const [error, setError] = useState(null)
+
+  // กล้องที่แท็บนี้กำลัง capture ให้ (ใช้ getUserMedia ของเครื่องผู้ใช้เอง)
+  const [browserCaptureId, setBrowserCaptureId] = useState(null)
+  const hiddenVideoRef = useRef(null)
+  const captureCanvasRef = useRef(null)
+  const mediaStreamRef = useRef(null)
+  const captureIntervalRef = useRef(null)
 
   const [streamUrl, setStreamUrl] = useState(null)
   const [countStats, setCountStats] = useState(null)
@@ -72,6 +80,18 @@ export default function LiveStream() {
   const [zones, setZones] = useState([])
   const [lines, setLines] = useState([])
   const [draftShape, setDraftShape] = useState(null) // {type:'zone'|'line', points:[[x,y],...], name, direction}
+  const [streamPort, setStreamPort] = useState('')
+
+  // If the backend is configured with a dedicated STREAM_PORT, point
+  // camera stream URLs there instead of the current page's origin/port.
+  useEffect(() => {
+    api.getConfig().then(cfg => setStreamPort(cfg.stream_port || '')).catch(() => {})
+  }, [])
+
+  const buildStreamUrl = useCallback((path) => {
+    if (!streamPort) return `/api${path}`
+    return `${window.location.protocol}//${window.location.hostname}:${streamPort}/api${path}`
+  }, [streamPort])
 
   const loadCameras = useCallback(async () => {
     try {
@@ -110,7 +130,8 @@ export default function LiveStream() {
       setStreamUrl(null)
       return
     }
-    const es = new EventSource(`/api/cameras/${selectedCamera.id}/stream`)
+    const url = buildStreamUrl(`/cameras/${selectedCamera.id}/stream`)
+    const es = new EventSource(url)
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
@@ -120,17 +141,75 @@ export default function LiveStream() {
       } catch {}
     }
     es.onerror = () => {}
-    setStreamUrl(`/api/cameras/${selectedCamera.id}/stream`)
+    setStreamUrl(url)
     return () => {
       es.close()
       setStreamUrl(null)
     }
-  }, [selectedCamera])
+  }, [selectedCamera, buildStreamUrl])
+
+  // เริ่ม capture กล้องของเครื่องนี้ (getUserMedia) แล้วส่งเฟรมขึ้นไปให้ camId เรื่อย ๆ
+  const startBrowserCapture = async (camId, fpsTarget = 10) => {
+    // เบราว์เซอร์นี้ capture ได้ทีละกล้องเท่านั้น — ปิดตัวเดิมก่อนเสมอ
+    // กันไม่ให้ interval/stream เก่าค้างส่งเฟรมทิ้งแบบไม่มีใครดู
+    stopBrowserCapture()
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      mediaStreamRef.current = stream
+      const video = hiddenVideoRef.current
+      video.srcObject = stream
+      await video.play()
+
+      if (!captureCanvasRef.current) captureCanvasRef.current = document.createElement('canvas')
+      const canvas = captureCanvasRef.current
+      const ctx = canvas.getContext('2d')
+      const intervalMs = Math.max(1000 / (fpsTarget || 10), 100)
+
+      captureIntervalRef.current = setInterval(() => {
+        if (!video.videoWidth) return
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0)
+        canvas.toBlob((blob) => {
+          if (!blob) return
+          api.cameraBrowserFrame(camId, blob).catch(() => {})
+        }, 'image/jpeg', 0.7)
+      }, intervalMs)
+
+      setBrowserCaptureId(camId)
+    } catch (err) {
+      setError('ไม่สามารถเปิดกล้องของเครื่องนี้ได้ (ตรวจสอบสิทธิ์การเข้าถึงกล้องของเบราว์เซอร์)')
+    }
+  }
+
+  const stopBrowserCapture = useCallback(() => {
+    if (captureIntervalRef.current) {
+      clearInterval(captureIntervalRef.current)
+      captureIntervalRef.current = null
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop())
+      mediaStreamRef.current = null
+    }
+    setBrowserCaptureId(null)
+  }, [])
+
+  useEffect(() => () => stopBrowserCapture(), [stopBrowserCapture])
 
   // Add camera
   const handleAdd = async () => {
-    if (!newCamSource.trim()) return
     try {
+      if (addMode === 'browser') {
+        const res = await api.cameraAddBrowser({ name: newCamName.trim() || 'กล้องเครื่องนี้' })
+        setNewCamSource('')
+        setNewCamName('')
+        setShowAddForm(false)
+        await loadCameras()
+        await startBrowserCapture(res.id, newCamFps)
+        setNewCamFps(15)
+        return
+      }
+      if (!newCamSource.trim()) return
       await api.cameraAdd({
         source: newCamSource.trim(),
         name: newCamName.trim() || newCamSource.trim(),
@@ -149,6 +228,7 @@ export default function LiveStream() {
   // Remove camera
   const handleRemove = async (id) => {
     try {
+      if (id === browserCaptureId) stopBrowserCapture()
       await api.cameraRemove(id)
       if (selectedCamera?.id === id) setSelectedCamera(null)
       await loadCameras()
@@ -160,7 +240,11 @@ export default function LiveStream() {
   // Start camera
   const handleStart = async (id) => {
     try {
+      const cam = cameras.find(c => c.id === id)
       await api.cameraStart(id)
+      if (cam?.source === 'browser') {
+        await startBrowserCapture(id, 10)
+      }
       await loadCameras()
     } catch (err) {
       setError('ไม่สามารถเปิดกล้องได้')
@@ -170,6 +254,7 @@ export default function LiveStream() {
   // Stop camera
   const handleStop = async (id) => {
     try {
+      if (id === browserCaptureId) stopBrowserCapture()
       await api.cameraStop(id)
       if (selectedCamera?.id === id) setSelectedCamera(null)
       await loadCameras()
@@ -261,6 +346,8 @@ export default function LiveStream() {
 
   return (
     <div className="live-stream-page">
+      {/* ใช้จับเฟรมจากกล้องของเครื่องนี้เอง (getUserMedia) — ไม่แสดงผล ผู้ใช้ดูภาพผ่าน stream ปกติแทน */}
+      <video ref={hiddenVideoRef} muted playsInline style={{ display: 'none' }} />
       <div className="page-header">
         <div>
           <h1 className="page-title">Camera</h1>
@@ -275,17 +362,33 @@ export default function LiveStream() {
       {showAddForm && (
         <div className="card add-cam-form">
           <div className="card-title"><Camera size={18} /> เพิ่มกล้องใหม่</div>
+          <div className="add-cam-mode-tabs">
+            <button
+              className={`btn btn-sm ${addMode === 'remote' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setAddMode('remote')}
+            >
+              <Camera size={13} /> IP/USB (เซิร์ฟเวอร์)
+            </button>
+            <button
+              className={`btn btn-sm ${addMode === 'browser' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setAddMode('browser')}
+            >
+              <Laptop size={13} /> กล้องเครื่องนี้ (เบราว์เซอร์)
+            </button>
+          </div>
           <div className="add-cam-grid">
-            <div className="form-group">
-              <label>แหล่งที่มา (Source)</label>
-              <input
-                type="text"
-                placeholder='เช่น rtsp://192.168.1.100:554/stream1 หรือ 0 (USB)'
-                value={newCamSource}
-                onChange={e => setNewCamSource(e.target.value)}
-              />
-              <span className="form-hint">rtsp:// สำหรับ IP Camera, ตัวเลขสำหรับ USB</span>
-            </div>
+            {addMode === 'remote' && (
+              <div className="form-group">
+                <label>แหล่งที่มา (Source)</label>
+                <input
+                  type="text"
+                  placeholder='เช่น rtsp://192.168.1.100:554/stream1 หรือ 0 (USB)'
+                  value={newCamSource}
+                  onChange={e => setNewCamSource(e.target.value)}
+                />
+                <span className="form-hint">rtsp:// สำหรับ IP Camera, ตัวเลขสำหรับ USB</span>
+              </div>
+            )}
             <div className="form-group">
               <label>ชื่อกล้อง</label>
               <input
@@ -304,9 +407,18 @@ export default function LiveStream() {
                 value={newCamFps}
                 onChange={e => setNewCamFps(parseInt(e.target.value) || 15)}
               />
-              <span className="form-hint">แนะนำ 5-15 FPS สำหรับสายผลิตทั่วไป</span>
+              <span className="form-hint">
+                {addMode === 'browser'
+                  ? 'ความถี่ที่เบราว์เซอร์นี้จะส่งเฟรมขึ้นไปให้เซิร์ฟเวอร์ประมวลผล'
+                  : 'แนะนำ 5-15 FPS สำหรับสายผลิตทั่วไป'}
+              </span>
             </div>
           </div>
+          {addMode === 'browser' && (
+            <div className="form-hint" style={{ marginBottom: 8 }}>
+              จะขอสิทธิ์เข้าถึงกล้องของเครื่องที่เปิดหน้านี้อยู่ — ต้องเปิดค้างไว้ที่แท็บนี้ขณะใช้งาน
+            </div>
+          )}
           <div className="add-cam-actions">
             <button className="btn btn-primary" onClick={handleAdd}>
               <Plus size={14} /> เพิ่ม
