@@ -12,6 +12,10 @@ runs/
 models/*.pt
 webapp/aijin.db
 tmp_pytest/
+tmp/
+.playwright-cli/
+webapp/.pytest_tmp*/
+webapp/.server_*.log
 webapp/server-smoke.*.log
 models/*.ndjson
 *.pdf
