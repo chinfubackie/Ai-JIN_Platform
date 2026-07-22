@@ -94,6 +94,22 @@ def _safe_path(base, user_path):
     return resolved
 
 
+def _label_path_for_image(image_path):
+    """Return the YOLO label path mirroring an image's dataset path."""
+    image_path = Path(image_path).resolve()
+    dataset_root = DATASET.resolve()
+    relative = image_path.relative_to(dataset_root)
+    parts = list(relative.parts)
+
+    image_indexes = [i for i, part in enumerate(parts) if part.lower() == "images"]
+    if image_indexes:
+        parts[image_indexes[-1]] = "labels"
+        parts[-1] = Path(parts[-1]).with_suffix(".txt").name
+        return dataset_root.joinpath(*parts)
+
+    return image_path.parent / "labels" / f"{image_path.stem}.txt"
+
+
 def _load_class_name_map():
     """Build a class_id -> real_name lookup from class_mapping.json.
 
@@ -782,8 +798,7 @@ def api_image(filepath):
 @app.route("/api/label/<path:filepath>")
 def api_label(filepath):
     img_path = _safe_path(DATASET, filepath)
-    label_dir = img_path.parent.parent / "labels"
-    label_file = label_dir / f"{img_path.stem}.txt"
+    label_file = _label_path_for_image(img_path)
     if not label_file.exists():
         return jsonify({"labels": [], "exists": False})
     lines = label_file.read_text().strip().split("\n")
@@ -808,9 +823,8 @@ def api_label_save():
     img_path = _safe_path(DATASET, img_rel)
     if not img_path.exists():
         return jsonify({"ok": False, "error": "Image not found"}), 404
-    label_dir = img_path.parent.parent / "labels"
-    label_dir.mkdir(parents=True, exist_ok=True)
-    label_file = label_dir / f"{img_path.stem}.txt"
+    label_file = _label_path_for_image(img_path)
+    label_file.parent.mkdir(parents=True, exist_ok=True)
     lines = []
     for lb in labels:
         lines.append(f"{lb['class_id']} {lb['cx']:.6f} {lb['cy']:.6f} {lb['w']:.6f} {lb['h']:.6f}")
@@ -1999,8 +2013,7 @@ def api_sam_predict():
 def api_label_ext(filepath):
     """Load labels in extended format: boxes and polygons."""
     img_path  = _safe_path(DATASET, filepath)
-    label_dir = img_path.parent.parent / "labels"
-    label_file = label_dir / f"{img_path.stem}.txt"
+    label_file = _label_path_for_image(img_path)
     if not label_file.exists():
         return jsonify({"boxes": [], "polygons": [], "exists": False})
 
@@ -2034,9 +2047,8 @@ def api_label_ext_save():
     if not img_path.exists():
         return jsonify({"ok": False, "error": "Image not found"}), 404
 
-    label_dir = img_path.parent.parent / "labels"
-    label_dir.mkdir(parents=True, exist_ok=True)
-    label_file = label_dir / f"{img_path.stem}.txt"
+    label_file = _label_path_for_image(img_path)
+    label_file.parent.mkdir(parents=True, exist_ok=True)
 
     lines = []
     for b in boxes:
