@@ -64,6 +64,16 @@
 .folder-stats-labeled-dot { background: var(--green, #22c55e); }
 .folder-stats-env-dot { background: var(--text-muted, #6b7280); }
 .folder-stats-loading { color: var(--text-muted); font-size: 12px; }
+.training-readiness-warning {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.1);
+  color: #facc15;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .form-group label {
   font-size: 12px;
   font-weight: 600;

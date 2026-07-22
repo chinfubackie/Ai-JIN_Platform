@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>คู่มือ Ai-JIN Platform - Training</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <section class="sheet cover">
+    <div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div>
+    <div class="cover-main">
+      <div class="eyebrow">AI Engineer and QA Guide</div>
+      <h1>คู่มือการ Train<br>และส่งออกโมเดล</h1>
+      <div class="rule"></div>
+      <p class="lead">เตรียม dataset ตั้งค่า Ultralytics ติดตามผล Validation และส่งออกโมเดลอย่างตรวจสอบย้อนกลับได้</p>
+      <div class="meta">
+        <div><small>หน้าจอ</small><strong>/training</strong></div>
+        <div><small>ฉบับ</small><strong>1.0 / 22 กรกฎาคม 2026</strong></div>
+        <div><small>Dataset</small><strong>Train / Val / Test</strong></div>
+        <div><small>สถานะ</small><strong>Blocked: Train 0 labels</strong></div>
+      </div>
+    </div>
+    <div class="foot"><span>Aichi Forging Technology</span><span>เอกสารควบคุมภายใน</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Training Readiness</span></div>
+    <h2>1. ตรวจความพร้อมก่อนเริ่ม</h2>
+    <img class="shot shot-medium" src="images/train-01-overview.png" alt="Training overview">
+    <div class="callout">ชุด active มี Train 1,015 / Val 127 / Test 107 ภาพ แต่ Train มี label 0 ภาพ ปุ่มเริ่มเทรนจึงถูกปิด</div>
+    <div class="grid2">
+      <div class="panel green"><h3>ต้องมี</h3><ul><li>images/train คู่กับ labels/train</li><li>label ไม่ว่างอย่างน้อย 1 ไฟล์</li><li>data.yaml มี names และทุก split</li></ul></div>
+      <div class="panel red"><h3>ห้ามใช้</h3><ul><li>split_quarantine</li><li>exact duplicate ข้าม split</li><li>class id เกินจำนวน names</li></ul></div>
+    </div>
+    <div class="foot"><span>Training Guide v1.0</span><span>2 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Dataset และ Configuration</span></div>
+    <h2>2. เลือก dataset และตั้งค่า</h2>
+    <img class="shot shot-medium" src="images/train-02-dataset-selected.png" alt="Train folder readiness">
+    <ol>
+      <li>ตรวจว่า dropdown เลือก <code>auto_improve/images/train</code></li>
+      <li>ตรวจจำนวนภาพทั้งหมด ภาพมี label และภาพไม่มี label</li>
+      <li>เลือกโมเดลพื้นฐานหรือ checkpoint ในเครื่อง</li>
+      <li>ตั้ง Epochs, Batch Size และ Image Size</li>
+      <li>เริ่มเมื่อ warning หายและปุ่มพร้อมใช้งาน</li>
+    </ol>
+    <div class="panel accent"><h3>Dataset ที่ runner ใช้จริง</h3><p>Frontend ส่ง <code>data=/dataset/auto_improve/data.yaml</code> เพื่อให้ Ultralytics อ่าน Train, Val และ Test จาก YAML เดียวกัน</p></div>
+    <div class="foot"><span>Training Guide v1.0</span><span>3 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>ค่าตั้งและการเริ่ม Run</span></div>
+    <h2>3. เลือกค่าตั้งอย่างมีเหตุผล</h2>
+    <table>
+      <thead><tr><th>ค่า</th><th>แนวทาง</th><th>ผลกระทบ</th></tr></thead>
+      <tbody>
+        <tr><td>Model</td><td>Nano สำหรับ smoke test; ขนาดใหญ่เมื่อข้อมูล/GPU พร้อม</td><td>ความเร็ว, VRAM, ความแม่นยำ</td></tr>
+        <tr><td>Epochs</td><td>1-5 สำหรับทดสอบ pipeline; production ดู convergence</td><td>เวลาและ overfitting</td></tr>
+        <tr><td>Batch</td><td>เพิ่มจนเหมาะกับ VRAM โดยไม่ OOM</td><td>throughput และ memory</td></tr>
+        <tr><td>Image Size</td><td>เริ่ม 640; เพิ่มเมื่อวัตถุเล็กและทรัพยากรพอ</td><td>รายละเอียดและเวลา</td></tr>
+      </tbody>
+    </table>
+    <h3>ลำดับเริ่ม Run</h3>
+    <div class="steps">
+      <div class="step"><b>1 QA Dataset</b><span>coverage และ leakage</span></div>
+      <div class="step"><b>2 Smoke Test</b><span>ยืนยัน path และ CUDA</span></div>
+      <div class="step"><b>3 Full Train</b><span>ติดตาม log/metrics</span></div>
+      <div class="step"><b>4 Validate</b><span>เลือก best checkpoint</span></div>
+    </div>
+    <div class="callout ok">backend local runner ตรวจไฟล์ label อีกชั้น แม้มีการเรียก API โดยไม่ผ่าน UI</div>
+    <div class="foot"><span>Training Guide v1.0</span><span>4 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Status และ Metrics</span></div>
+    <h2>4. ติดตามผลระหว่างเทรน</h2>
+    <div class="grid2">
+      <div class="panel accent"><h3>สถานะ</h3><ul><li>idle: ยังไม่ทำงาน</li><li>training: กำลังรัน</li><li>completed: สำเร็จ</li><li>error: ตรวจ log ทันที</li></ul></div>
+      <div class="panel green"><h3>หลักฐาน</h3><ul><li>epoch และ progress</li><li>loss และ mAP</li><li>run name / config</li><li>best.pt / results.csv</li></ul></div>
+    </div>
+    <h3>Local และ Remote runner</h3>
+    <p>ระบบตรวจ training service ก่อน หาก service offline จะใช้ local Ultralytics runner และแสดง <code>runner: local</code> หากออนไลน์จะส่งงานไป remote runner</p>
+    <div class="callout">อย่าปิด service หรือย้าย run directory ขณะกำลังเขียน weights</div>
+    <h3>การอ่านผลเบื้องต้น</h3>
+    <ul><li>Loss ควรลดลงอย่างมีแนวโน้ม ไม่ใช้ค่าเดียวตัดสิน</li><li>mAP50 และ mAP50-95 ต้องพิจารณาร่วมกับตัวอย่างผิดพลาดจริง</li><li>ตรวจ per-class metric โดยเฉพาะ workpiece ที่มีตัวอย่างน้อย</li></ul>
+    <div class="foot"><span>Training Guide v1.0</span><span>5 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>History และ Export</span></div>
+    <h2>5. ตรวจประวัติและส่งออก</h2>
+    <img class="shot shot-medium" src="images/train-03-history-export.png" alt="Model history and export">
+    <table>
+      <thead><tr><th>Format</th><th>การใช้งานหลัก</th></tr></thead>
+      <tbody>
+        <tr><td>ONNX</td><td>Runtime ทั่วไปและ workflow ต่อไป TensorRT</td></tr>
+        <tr><td>TorchScript</td><td>Deployment ที่ใช้ PyTorch</td></tr>
+        <tr><td>TFLite</td><td>อุปกรณ์ edge/mobile ที่รองรับ</td></tr>
+        <tr><td>CoreML</td><td>Apple platform</td></tr>
+      </tbody>
+    </table>
+    <div class="panel green"><h3>เก็บร่วมกับโมเดล</h3><p><code>best.pt</code>, <code>results.csv</code>, data.yaml, split manifest, class mapping, hyperparameters, seed และผู้อนุมัติ</p></div>
+    <div class="foot"><span>Training Guide v1.0</span><span>6 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Validation, Troubleshooting, Sign-off</span></div>
+    <h2>6. Validation และ Test</h2>
+    <ol><li>เลือก checkpoint จาก Validation</li><li>ห้ามปรับ threshold ให้เข้ากับ Test</li><li>ใช้ Test รายงานผลสุดท้าย</li><li>ทดสอบ Camera จริงก่อน promote</li></ol>
+    <h2>7. การแก้ปัญหา</h2>
+    <table>
+      <thead><tr><th>อาการ</th><th>วิธีแก้</th></tr></thead>
+      <tbody>
+        <tr><td>Start ถูกปิด / 0 labels</td><td>ทำ Label ใน labels/train ให้ชื่อคู่ภาพและมีข้อมูล</td></tr>
+        <tr><td>data.yaml ไม่พบ</td><td>สร้างจาก Import และตรวจ mount /dataset</td></tr>
+        <tr><td>CUDA OOM</td><td>ลด Batch หรือ Image Size</td></tr>
+        <tr><td>Metric ต่ำ</td><td>ตรวจ class, กรอบ, leakage และสมดุล workpiece</td></tr>
+      </tbody>
+    </table>
+    <h3>Checklist อนุมัติ</h3>
+    <ul class="check"><li>Train/Val coverage ผ่าน QA</li><li>ไม่มี duplicate leakage</li><li>Validation/Test ผ่านเกณฑ์</li><li>Camera inference ผ่าน</li><li>Export โหลดใน runtime สำเร็จ</li></ul>
+    <div class="callout">สถานะปัจจุบันยังไม่อนุมัติให้ Train: Train labels = 0 / 1,015</div>
+    <div class="foot"><span>Training Guide v1.0</span><span>7 / 7</span></div>
+  </section>
+</body>
+</html>

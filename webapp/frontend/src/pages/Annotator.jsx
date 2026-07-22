@@ -8,6 +8,7 @@ import {
   Layers, Tag, Play, Pause,
 } from 'lucide-react'
 import LMAssistant from '../components/LMAssistant'
+import { moveYoloBox, resizeYoloBox } from './annotationGeometry'
 import './Annotator.css'
 
 const CLASS_COLORS = [
@@ -81,6 +82,7 @@ export default function Annotator() {
   const loadedImageRef = useRef(null) // path of the image currently loaded into imgRef/imgNat
   const renderRect = useRef({ w: 1, h: 1, ox: 0, oy: 0 })
   const boxDrawRef = useRef(null)
+  const boxDragRef = useRef(null)
   const drawRef    = useRef(null)
   const autoPlayRef = useRef(false)
   const autoPlayTimeoutRef = useRef(null)
@@ -456,11 +458,89 @@ export default function Annotator() {
   }
   function clamp01(v) { return Math.max(0, Math.min(1, v)) }
 
+  function boxPixelRect(box) {
+    const [, cx, cy, bw, bh] = box
+    const { w, h, ox, oy } = renderRect.current
+    return {
+      x1: ox + (cx - bw / 2) * w,
+      y1: oy + (cy - bh / 2) * h,
+      x2: ox + (cx + bw / 2) * w,
+      y2: oy + (cy + bh / 2) * h,
+    }
+  }
+
+  function selectedResizeHandle(cx, cy) {
+    if (selected?.type !== 'box' || !boxes[selected.idx]) return null
+    const { x1, y1, x2, y2 } = boxPixelRect(boxes[selected.idx])
+    const handles = [
+      ['nw', x1, y1],
+      ['ne', x2, y1],
+      ['sw', x1, y2],
+      ['se', x2, y2],
+    ]
+    return handles.find(([, hx, hy]) => Math.hypot(cx - hx, cy - hy) <= 10)?.[0] || null
+  }
+
+  function boxAt(cx, cy) {
+    for (let i = boxes.length - 1; i >= 0; i--) {
+      const { x1, y1, x2, y2 } = boxPixelRect(boxes[i])
+      if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) return i
+    }
+    return -1
+  }
+
+  function startSelectInteraction(cx, cy) {
+    const handle = selectedResizeHandle(cx, cy)
+    if (handle) {
+      boxDragRef.current = {
+        mode: 'resize',
+        handle,
+        idx: selected.idx,
+        originalBox: [...boxes[selected.idx]],
+        historySaved: false,
+      }
+      return
+    }
+
+    const idx = boxAt(cx, cy)
+    if (idx >= 0) {
+      const [nx, ny] = normPos(cx, cy)
+      setSelected({ type: 'box', idx })
+      boxDragRef.current = {
+        mode: 'move',
+        idx,
+        start: [nx, ny],
+        originalBox: [...boxes[idx]],
+        historySaved: false,
+      }
+      return
+    }
+
+    hitTest(cx, cy)
+  }
+
+  function updateBoxDrag(cx, cy) {
+    const drag = boxDragRef.current
+    if (!drag) return
+    const [nx, ny] = normPos(cx, cy)
+    if (!drag.historySaved) {
+      pushHistory(boxes.map(box => [...box]), polygons.map(poly => ({
+        ...poly,
+        pts: poly.pts.map(point => [...point]),
+      })))
+      drag.historySaved = true
+    }
+    const nextBox = drag.mode === 'move'
+      ? moveYoloBox(drag.originalBox, nx - drag.start[0], ny - drag.start[1])
+      : resizeYoloBox(drag.originalBox, drag.handle, nx, ny)
+    setBoxes(prev => prev.map((box, i) => i === drag.idx ? nextBox : box))
+  }
+
   /* ── mouse events ── */
   function onMouseDown(e) {
     if (e.button !== 0) return
     const [cx, cy] = canvasPos(e)
-    if (tool === TOOL.SELECT) { hitTest(cx, cy); return }
+    if (tool === TOOL.SELECT) { startSelectInteraction(cx, cy); return }
     if (tool === TOOL.BOX) { boxDrawRef.current = { sx: cx, sy: cy }; return }
     if (tool === TOOL.POLYGON) {
       if (polyDraft.length >= 3) {
@@ -475,9 +555,14 @@ export default function Annotator() {
   function onMouseMove(e) {
     const [cx, cy] = canvasPos(e)
     setHoverPt([cx, cy])
+    if (tool === TOOL.SELECT) updateBoxDrag(cx, cy)
   }
 
   function onMouseUp(e) {
+    if (tool === TOOL.SELECT) {
+      boxDragRef.current = null
+      return
+    }
     if (tool === TOOL.BOX && boxDrawRef.current) {
       const [cx, cy] = canvasPos(e)
       const { sx, sy } = boxDrawRef.current
@@ -1083,7 +1168,11 @@ export default function Annotator() {
                 onMouseDown={onMouseDown}
                 onMouseMove={onMouseMove}
                 onMouseUp={onMouseUp}
-                onMouseLeave={() => { boxDrawRef.current = null; setHoverPt(null) }}
+                onMouseLeave={() => {
+                  boxDrawRef.current = null
+                  boxDragRef.current = null
+                  setHoverPt(null)
+                }}
                 onDoubleClick={() => { if (tool === TOOL.POLYGON && polyDraft.length >= 3) closePolygon() }}
               />
             ) : (

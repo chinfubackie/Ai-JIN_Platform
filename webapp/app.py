@@ -379,6 +379,53 @@ def _resolve_training_data_path(data_ref):
     return candidate
 
 
+def _training_label_readiness(data_yaml, yaml_data):
+    dataset_root = Path(str(yaml_data.get("path") or "."))
+    if not dataset_root.is_absolute():
+        dataset_root = data_yaml.parent / dataset_root
+    dataset_root = dataset_root.resolve()
+
+    train_refs = yaml_data.get("train") or "images/train"
+    if isinstance(train_refs, (str, Path)):
+        train_refs = [train_refs]
+
+    total = 0
+    labeled = 0
+    for train_ref in train_refs:
+        image_dir = Path(str(train_ref))
+        if not image_dir.is_absolute():
+            image_dir = dataset_root / image_dir
+        image_dir = image_dir.resolve()
+        if not image_dir.is_dir():
+            continue
+
+        if image_dir.parent.name.lower() == "images":
+            label_dir = image_dir.parent.parent / "labels" / image_dir.name
+        else:
+            parts = list(image_dir.parts)
+            image_index = next(
+                (index for index in range(len(parts) - 1, -1, -1) if parts[index].lower() == "images"),
+                None,
+            )
+            if image_index is None:
+                continue
+            parts[image_index] = "labels"
+            label_dir = Path(*parts)
+
+        for image_path in image_dir.rglob("*"):
+            if not image_path.is_file() or image_path.suffix.lower() not in IMG_EXT:
+                continue
+            total += 1
+            label_path = label_dir / image_path.relative_to(image_dir).with_suffix(".txt")
+            try:
+                if label_path.is_file() and label_path.read_text(encoding="utf-8").strip():
+                    labeled += 1
+            except OSError:
+                continue
+
+    return {"total": total, "labeled": labeled}
+
+
 def _resolve_training_model(model_ref):
     model_ref = model_ref or "yolov8n.pt"
     candidate = Path(str(model_ref))
@@ -442,6 +489,17 @@ def _start_local_training(config):
                     "ตรวจสอบว่ามีภาพที่ label แล้วอยู่ใน images/train ของ dataset "
                     "(generate-yaml จะหาคลาสจากโฟลเดอร์ที่มีภาพใน images/train เท่านั้น)"
                 ),
+            }
+        readiness = _training_label_readiness(data_yaml, yaml_data)
+        if readiness["labeled"] == 0:
+            return {
+                "ok": False,
+                "runner": "local",
+                "error": (
+                    "ยังเริ่มเทรนไม่ได้: ไม่พบไฟล์ label ที่มีข้อมูลคู่กับภาพในชุด Train "
+                    f"(ภาพ {readiness['total']} / มี label {readiness['labeled']})"
+                ),
+                "readiness": readiness,
             }
     except (OSError, ValueError):
         pass  # let ultralytics surface its own error if the yaml can't be read/parsed here
@@ -1271,6 +1329,32 @@ def api_train_start():
             "name": run_name,
         },
     }
+    try:
+        import yaml as _yaml
+
+        data_yaml = _resolve_training_data_path(body["config"]["data"])
+        yaml_data = _yaml.safe_load(data_yaml.read_text(encoding="utf-8")) or {}
+        if not yaml_data.get("names"):
+            return jsonify({
+                "ok": False,
+                "error": f"{data_yaml} ไม่มีคลาส (names ว่าง) จึงเริ่มเทรนไม่ได้",
+            }), 400
+        readiness = _training_label_readiness(data_yaml, yaml_data)
+        if readiness["labeled"] == 0:
+            return jsonify({
+                "ok": False,
+                "error": (
+                    "ยังเริ่มเทรนไม่ได้: ไม่พบไฟล์ label ที่มีข้อมูลคู่กับภาพในชุด Train "
+                    f"(ภาพ {readiness['total']} / มี label {readiness['labeled']})"
+                ),
+                "readiness": readiness,
+            }), 400
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "error": f"ตรวจสอบ training dataset ไม่สำเร็จ: {exc}",
+        }), 400
+
     health = yolo_get("/health")
     remote_status = health.get("status") if isinstance(health, dict) else "offline"
     if remote_status == "offline":

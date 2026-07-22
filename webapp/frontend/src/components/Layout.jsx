@@ -36,6 +36,13 @@ const TOP_TABS = [
   { to: '/api-docs', label: 'API Docs' },
 ]
 
+const MOBILE_EXTRA_TABS = [
+  { to: '/projects', label: 'Projects' },
+  { to: '/dataset', label: 'Datasets' },
+  { to: '/settings', label: 'Settings' },
+  { to: '/team', label: 'Team' },
+]
+
 /* ---- Sidebar nav items ---- */
 const SIDEBAR_NAV = [
   { to: '/dashboard', icon: Home, label: 'Home' },
@@ -141,12 +148,16 @@ function UserDropdown({ show, onClose, onNavigate, onToggleTheme, onSignOut }) {
 
 /* ---- Main Layout ---- */
 export default function Layout() {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('aijin-sidebar-collapsed') === 'true')
   const [darkMode, setDarkMode] = useState(true)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notice, setNotice] = useState('')
   const navigate = useNavigate()
+
+  useEffect(() => {
+    localStorage.setItem('aijin-sidebar-collapsed', String(collapsed))
+  }, [collapsed])
 
   const notifications = [
     { title: 'Dataset sync พร้อมใช้งาน', detail: 'เปิดหน้า Import เพื่อเพิ่มข้อมูลใหม่' },
@@ -181,6 +192,15 @@ export default function Layout() {
               key={to + label}
               to={to}
               className={({ isActive }) => `topbar-tab ${isActive ? 'topbar-tab-active' : ''}`}
+            >
+              {label}
+            </NavLink>
+          ))}
+          {MOBILE_EXTRA_TABS.map(({ to, label }) => (
+            <NavLink
+              key={`mobile-${to}`}
+              to={to}
+              className={({ isActive }) => `topbar-tab topbar-tab-mobile ${isActive ? 'topbar-tab-active' : ''}`}
             >
               {label}
             </NavLink>
@@ -332,6 +352,17 @@ export default function Layout() {
           </div>
         )}
       </aside>
+
+      <button
+        type="button"
+        className="sidebar-slide-btn"
+        onClick={() => setCollapsed(value => !value)}
+        title={collapsed ? 'แสดงเมนูด้านข้าง' : 'เก็บเมนูด้านข้าง'}
+        aria-label={collapsed ? 'แสดงเมนูด้านข้าง' : 'เก็บเมนูด้านข้าง'}
+        aria-expanded={!collapsed}
+      >
+        {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </button>
 
       {/* ===== MAIN CONTENT ===== */}
       <main className="main-content">

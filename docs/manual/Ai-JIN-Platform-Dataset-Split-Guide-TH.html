@@ -322,7 +322,7 @@
     <div class="ok-callout callout"><strong>ผลตรวจ:</strong> 1,249 canonical images, 320 capture groups, 0 duplicate hash ข้าม split, 0 group leakage และ 54 duplicate images ใน quarantine</div>
     <h3>Manifest ที่ใช้งาน</h3>
     <p><code>20260722_181429_3bbdee64</code></p>
-    <div class="callout"><strong>ยังไม่พร้อม Train:</strong> label coverage รวมเพียง 1 / 1,249 ภาพ ต้อง annotate และตรวจคุณภาพกรอบก่อน</div>
+    <div class="callout"><strong>ยังไม่พร้อม Train:</strong> label coverage รวม 5 / 1,249 ภาพ และทั้งหมดอยู่ใน Test ต้อง annotate Train/Val และตรวจคุณภาพกรอบก่อน</div>
     <div class="page-foot"><span>Dataset Split Guide v1.0</span><span>5 / 10</span></div>
   </section>
 
@@ -401,7 +401,7 @@
     <div class="grid-2">
       <div>
         <h2>6. ใช้งานบนมือถือ</h2>
-        <p>หน้า Import ใช้เต็มความกว้าง แถบนำทางด้านบนเลื่อนในแนวนอนได้ และซ่อน sidebar บนหน้าจอแคบ</p>
+        <p>หน้า Import ใช้เต็มความกว้าง เมนูทั้งหมดแสดงเป็น 4 คอลัมน์ 3 แถวโดยไม่ต้องเลื่อนแนวนอน และซ่อน sidebar ที่ซ้ำซ้อนบนหน้าจอแคบ</p>
         <img class="shot shot-mobile" src="images/dataset-split-05-mobile.png" alt="หน้า Import บนมือถือ">
         <p class="caption">ภาพจริงที่ 5 - Chrome 430 x 900</p>
       </div>
@@ -416,7 +416,7 @@
           <li>Test ไม่ถูกใช้ปรับค่าโมเดล</li>
           <li>data.yaml มี path และ names ถูกต้อง</li>
         </ul>
-        <div class="callout"><strong>สถานะปัจจุบัน: ไม่พร้อม</strong><br>มี label 1 ไฟล์จาก 1,249 ภาพ และ label นั้นอยู่ใน Test</div>
+        <div class="callout"><strong>สถานะปัจจุบัน: ไม่พร้อม</strong><br>มี label 5 ไฟล์จาก 1,249 ภาพ และทั้งหมดอยู่ใน Test; Train ยังมี 0 label</div>
         <p class="small">แนะนำใช้จอเดสก์ท็อปเมื่อ Apply หรือ Undo เพื่ออ่านตาราง workpiece และคำเตือนได้ครบถ้วน</p>
       </div>
     </div>
