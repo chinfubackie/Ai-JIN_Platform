@@ -92,6 +92,13 @@ def test_generate_yaml_creates_empty_dataset_root(monkeypatch, tmp_path):
 
 def test_generate_yaml_accepts_post_without_json_body(monkeypatch, tmp_path):
     app_mod = load_app(monkeypatch, tmp_path)
+    image = (
+        tmp_path
+        / "dataset/auto_improve/images/train"
+        / "F-373130-K010_20260717_090000_000001.jpg"
+    )
+    image.parent.mkdir(parents=True, exist_ok=True)
+    image.write_bytes(b"image")
 
     response = app_mod.app.test_client().post("/api/import/generate-yaml")
 
@@ -99,3 +106,5 @@ def test_generate_yaml_accepts_post_without_json_body(monkeypatch, tmp_path):
     data = response.get_json()
     assert data["ok"] is True
     assert "test: images/test\n" in data["yaml"]
+    assert data["nc"] == 1
+    assert data["names"] == ["F-373130-K010"]

@@ -1867,12 +1867,20 @@ def api_generate_yaml():
     data = request.get_json(silent=True) or {}
     classes = data.get("classes", [])
     if not classes:
-        cls_d = DATASET / "auto_improve" / "images" / "train"
-        if cls_d.exists():
-            classes = sorted(
-                d.name for d in cls_d.iterdir()
-                if d.is_dir() and any(
-                    f.suffix.lower() in IMG_EXT for f in d.iterdir()))
+        image_root = DATASET / "auto_improve" / "images"
+        discovered = set()
+        for split in ("train", "val", "test"):
+            split_dir = image_root / split
+            if not split_dir.exists():
+                continue
+            for image_path in split_dir.rglob("*"):
+                if not image_path.is_file() or image_path.suffix.lower() not in IMG_EXT:
+                    continue
+                relative = image_path.relative_to(split_dir)
+                identity = _dataset_split.parse_capture_identity(relative, relative)
+                if identity.workpiece:
+                    discovered.add(identity.workpiece)
+        classes = sorted(discovered)
     yaml_content = (
         f"path: {str(DATASET / 'auto_improve').replace(chr(92), '/')}\n"
         f"train: images/train\n"
