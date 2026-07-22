@@ -144,6 +144,34 @@ def test_assignment_is_deterministic_and_keeps_groups_whole(tmp_path):
         assert len({first[record.source] for record in group.records}) == 1
 
 
+def test_assignment_swaps_seeded_groups_to_fit_coarse_ratios(tmp_path):
+    start = datetime(2026, 7, 17, 9, 0, 0)
+    groups = []
+    for index, size in enumerate((153, 81, 27, 9)):
+        records = tuple(
+            make_record(
+                tmp_path,
+                f"coarse-{index}-{item}.jpg",
+                "part",
+                start + timedelta(minutes=index, seconds=item),
+            )
+            for item in range(size)
+        )
+        groups.append(CaptureGroup(f"part:{index}", "part", records))
+
+    assignments = assign_groups(
+        groups,
+        {"train": 0.8, "val": 0.1, "test": 0.1},
+        seed=42,
+    )
+    counts = {
+        split: sum(value == split for value in assignments.values())
+        for split in ("train", "val", "test")
+    }
+
+    assert counts == {"train": 234, "val": 27, "test": 9}
+
+
 def create_transaction_dataset(tmp_path, include_duplicate=False):
     root = tmp_path / "auto_improve"
     originals = []

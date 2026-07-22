@@ -298,20 +298,65 @@ def _assign_workpiece_groups(
                 score = _assignment_score(proposed, targets)
                 candidate = (
                     score,
-                    _stable_group_rank(group, seed),
-                    group,
-                    source_split,
-                    target_split,
-                    proposed,
+                    f"move:{_stable_group_rank(group, seed)}:{target_split}",
+                    ("move", group, source_split, target_split, proposed),
                 )
                 if score + 1e-12 < baseline and (best is None or candidate[:2] < best[:2]):
                     best = candidate
+
+        for index, left_group in enumerate(ordered):
+            left_split = assignments[left_group.key]
+            left_size = len(left_group.records)
+            for right_group in ordered[index + 1 :]:
+                right_split = assignments[right_group.key]
+                if left_split == right_split:
+                    continue
+                right_size = len(right_group.records)
+                proposed = dict(counts)
+                proposed[left_split] += right_size - left_size
+                proposed[right_split] += left_size - right_size
+                score = _assignment_score(proposed, targets)
+                ranks = sorted(
+                    (
+                        _stable_group_rank(left_group, seed),
+                        _stable_group_rank(right_group, seed),
+                    )
+                )
+                candidate = (
+                    score,
+                    f"swap:{ranks[0]}:{ranks[1]}",
+                    (
+                        "swap",
+                        left_group,
+                        right_group,
+                        left_split,
+                        right_split,
+                        proposed,
+                    ),
+                )
+                if score + 1e-12 < baseline and (
+                    best is None or candidate[:2] < best[:2]
+                ):
+                    best = candidate
         if best is None:
             break
-        _, _, group, source_split, target_split, counts = best
-        assignments[group.key] = target_split
-        group_counts[source_split] -= 1
-        group_counts[target_split] += 1
+        action = best[2]
+        if action[0] == "move":
+            _, group, source_split, target_split, counts = action
+            assignments[group.key] = target_split
+            group_counts[source_split] -= 1
+            group_counts[target_split] += 1
+        else:
+            (
+                _,
+                left_group,
+                right_group,
+                left_split,
+                right_split,
+                counts,
+            ) = action
+            assignments[left_group.key] = right_split
+            assignments[right_group.key] = left_split
     return assignments
 
 
