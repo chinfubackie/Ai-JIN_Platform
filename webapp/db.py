@@ -239,6 +239,26 @@ def image_upsert(project_id, path, filename, split="train", width=0, height=0):
         return row["id"]
 
 
+def image_move_path(old_path, new_path, new_split):
+    """Update registered image rows after a dataset file is moved."""
+    with get_db() as con:
+        cursor = con.execute(
+            """
+            UPDATE images
+            SET path=?, filename=?, split=?, updated_at=?
+            WHERE path=?
+            """,
+            (
+                new_path,
+                Path(new_path).name,
+                new_split,
+                now_iso(),
+                old_path,
+            ),
+        )
+        return cursor.rowcount
+
+
 def image_set_labeled(image_id, labeled, ann_count=0):
     with get_db() as con:
         con.execute(

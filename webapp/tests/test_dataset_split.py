@@ -1,14 +1,23 @@
 from datetime import datetime, timedelta
 from pathlib import Path
+import shutil
+
+import pytest
+import db
 
 from dataset_split import (
     CaptureGroup,
     ImageRecord,
+    SplitApplyError,
+    StalePlanError,
+    apply_split_plan,
     assign_groups,
     build_capture_groups,
     choose_canonical_records,
+    create_split_plan,
     parse_capture_identity,
     scan_dataset,
+    undo_split_manifest,
 )
 
 
@@ -133,3 +142,191 @@ def test_assignment_is_deterministic_and_keeps_groups_whole(tmp_path):
     assert set(first.values()) == {"train", "val", "test"}
     for group in groups:
         assert len({first[record.source] for record in group.records}) == 1
+
+
+def create_transaction_dataset(tmp_path, include_duplicate=False):
+    root = tmp_path / "auto_improve"
+    originals = []
+    for index, minute in enumerate((0, 2, 4, 6)):
+        image = (
+            root
+            / "images/train"
+            / f"part_20260717_09{minute:02d}00_000001.jpg"
+        )
+        label = (
+            root
+            / "labels/train"
+            / f"part_20260717_09{minute:02d}00_000001.txt"
+        )
+        image.parent.mkdir(parents=True, exist_ok=True)
+        label.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(f"image-{index}".encode("utf-8"))
+        label.write_text(f"0 0.5 0.5 0.{index + 1} 0.2\n", encoding="utf-8")
+        originals.append(image)
+
+    duplicate = None
+    if include_duplicate:
+        duplicate = root / "images/val" / originals[0].name
+        duplicate.parent.mkdir(parents=True, exist_ok=True)
+        duplicate.write_bytes(originals[0].read_bytes())
+    return originals, duplicate
+
+
+def test_create_split_plan_persists_preview_without_moving_files(tmp_path):
+    originals, _ = create_transaction_dataset(tmp_path)
+
+    plan = create_split_plan(
+        tmp_path,
+        {"train": 0.8, "val": 0.1, "test": 0.1},
+        gap_seconds=30,
+        seed=42,
+        image_extensions={".jpg"},
+    )
+
+    assert plan["plan_id"]
+    assert Path(plan["plan_path"]).exists()
+    assert all(path.exists() for path in originals)
+    assert plan["summary"]["current"]["train"] == 4
+    assert sum(plan["summary"]["proposed"].values()) == 4
+
+
+def test_apply_moves_images_labels_and_quarantines_duplicates(tmp_path):
+    originals, duplicate = create_transaction_dataset(
+        tmp_path,
+        include_duplicate=True,
+    )
+    plan = create_split_plan(
+        tmp_path,
+        {"train": 0.8, "val": 0.1, "test": 0.1},
+        gap_seconds=30,
+        seed=42,
+        image_extensions={".jpg"},
+    )
+
+    result = apply_split_plan(tmp_path, plan["plan_id"])
+
+    assert result["ok"] is True
+    assert result["quarantined_duplicates"] == 1
+    assert not duplicate.exists()
+    assert all(
+        (tmp_path / item["destination"]).exists()
+        for item in plan["items"]
+    )
+    assert all(
+        (tmp_path / item["label_destination"]).exists()
+        for item in plan["items"]
+        if item["label_source"]
+    )
+    assert (tmp_path / result["manifest_path"]).exists()
+
+
+def test_apply_rejects_stale_plan_before_any_move(tmp_path):
+    originals, _ = create_transaction_dataset(tmp_path)
+    plan = create_split_plan(
+        tmp_path,
+        {"train": 0.8, "val": 0.1, "test": 0.1},
+        gap_seconds=30,
+        seed=42,
+        image_extensions={".jpg"},
+    )
+    originals[0].write_bytes(b"changed-after-preview")
+
+    with pytest.raises(StalePlanError):
+        apply_split_plan(tmp_path, plan["plan_id"])
+
+    assert all(path.exists() for path in originals)
+    assert not (tmp_path / "auto_improve/split_manifests").exists()
+
+
+def test_apply_rejects_label_changed_after_preview(tmp_path):
+    originals, _ = create_transaction_dataset(tmp_path)
+    plan = create_split_plan(
+        tmp_path,
+        {"train": 0.8, "val": 0.1, "test": 0.1},
+        gap_seconds=30,
+        seed=42,
+        image_extensions={".jpg"},
+    )
+    label = (
+        tmp_path
+        / "auto_improve/labels/train"
+        / originals[0].with_suffix(".txt").name
+    )
+    label.write_text("0 0.4 0.4 0.1 0.1\n", encoding="utf-8")
+
+    with pytest.raises(StalePlanError):
+        apply_split_plan(tmp_path, plan["plan_id"])
+
+    assert all(path.exists() for path in originals)
+
+
+def test_apply_rolls_back_completed_moves_on_failure(tmp_path):
+    originals, _ = create_transaction_dataset(tmp_path)
+    plan = create_split_plan(
+        tmp_path,
+        {"train": 0.8, "val": 0.1, "test": 0.1},
+        gap_seconds=30,
+        seed=42,
+        image_extensions={".jpg"},
+    )
+    calls = 0
+
+    def fail_second_move(source, destination):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("injected move failure")
+        return shutil.move(source, destination)
+
+    with pytest.raises(SplitApplyError):
+        apply_split_plan(
+            tmp_path,
+            plan["plan_id"],
+            mover=fail_second_move,
+        )
+
+    assert all(path.exists() for path in originals)
+
+
+def test_undo_restores_original_images_labels_and_duplicates(tmp_path):
+    originals, duplicate = create_transaction_dataset(
+        tmp_path,
+        include_duplicate=True,
+    )
+    original_labels = [
+        tmp_path
+        / "auto_improve/labels/train"
+        / path.with_suffix(".txt").name
+        for path in originals
+    ]
+    plan = create_split_plan(
+        tmp_path,
+        {"train": 0.8, "val": 0.1, "test": 0.1},
+        gap_seconds=30,
+        seed=42,
+        image_extensions={".jpg"},
+    )
+    applied = apply_split_plan(tmp_path, plan["plan_id"])
+
+    result = undo_split_manifest(tmp_path, applied["manifest_id"])
+
+    assert result["ok"] is True
+    assert all(path.exists() for path in originals)
+    assert all(path.exists() for path in original_labels)
+    assert duplicate.exists()
+
+
+def test_image_move_path_updates_registered_database_rows(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "aijin.db")
+    db.init_db()
+    project_id = db.project_create("split-test")
+    old_path = "auto_improve/images/train/part.jpg"
+    new_path = "auto_improve/images/val/part.jpg"
+    db.image_upsert(project_id, old_path, "part.jpg", split="train")
+
+    updated = db.image_move_path(old_path, new_path, "val")
+
+    row = db.image_list(project_id)["images"][0]
+    assert updated == 1
+    assert row["path"] == new_path
+    assert row["split"] == "val"
