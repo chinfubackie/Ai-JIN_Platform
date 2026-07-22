@@ -4,7 +4,9 @@ import {
   Upload, FolderOpen, Trash2, ArrowRightLeft, FileCode, RefreshCw,
   X, Check, ChevronLeft, ChevronRight, ImageIcon, Tag, CheckSquare, Square,
   BarChart3, Brain, Download, Database, Boxes, Video, StopCircle, Zap,
+  RotateCcw,
 } from 'lucide-react'
+import { buildSplitRequest, splitPreviewRows } from './datasetSplitUi'
 import './DataImport.css'
 
 const PER_PAGE = 60
@@ -46,6 +48,14 @@ export default function DataImport() {
 
   // Split info
   const [splitInfo, setSplitInfo] = useState(null)
+  const [splitRatios, setSplitRatios] = useState({ train: 80, val: 10, test: 10 })
+  const [splitSessionGap, setSplitSessionGap] = useState(30)
+  const [splitSeed, setSplitSeed] = useState(42)
+  const [splitPreview, setSplitPreview] = useState(null)
+  const [splitLatest, setSplitLatest] = useState(null)
+  const [splitAnalyzing, setSplitAnalyzing] = useState(false)
+  const [splitApplying, setSplitApplying] = useState(false)
+  const [splitUndoing, setSplitUndoing] = useState(false)
 
   // Video auto-label state
   const [videoFile, setVideoFile] = useState(null)
@@ -81,6 +91,12 @@ export default function DataImport() {
     api.importSplitInfo().then(setSplitInfo).catch(() => {})
   }, [])
 
+  const loadSplitLatest = useCallback(() => {
+    api.importSplitLatest()
+      .then(data => setSplitLatest(data?.manifest || null))
+      .catch(() => setSplitLatest(null))
+  }, [])
+
   const loadFolders = useCallback(() => {
     api.folders().then(data => {
       const list = (data?.folders || data || []).map(f => typeof f === 'string' ? f : f.path)
@@ -102,6 +118,7 @@ export default function DataImport() {
   useEffect(() => {
     loadClasses()
     loadSplitInfo()
+    loadSplitLatest()
     loadFolders()
     api.projects().then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {})
     api.models().then(data => {
@@ -111,7 +128,7 @@ export default function DataImport() {
       if (deployed) setVideoModel(deployed)
       else if (list.length > 0) setVideoModel(list[0].path || list[0].best_pt || list[0].name || '')
     }).catch(() => setVideoModels([]))
-  }, [loadClasses, loadSplitInfo, loadFolders])
+  }, [loadClasses, loadSplitInfo, loadSplitLatest, loadFolders])
 
   // --- Video auto-label: poll status while running ---
   useEffect(() => {
@@ -144,9 +161,10 @@ export default function DataImport() {
   const refreshAll = useCallback(() => {
     loadClasses()
     loadSplitInfo()
+    loadSplitLatest()
     loadFolders()
     if (activeFolder) loadImages(activeFolder, page)
-  }, [loadClasses, loadSplitInfo, loadFolders, loadImages, activeFolder, page])
+  }, [loadClasses, loadSplitInfo, loadSplitLatest, loadFolders, loadImages, activeFolder, page])
 
   // --- Create Folder ---
   const handleCreateFolder = async () => {
@@ -393,6 +411,74 @@ export default function DataImport() {
     }
   }
 
+  const updateSplitRatio = (key, value) => {
+    setSplitRatios(prev => ({ ...prev, [key]: value }))
+    setSplitPreview(null)
+  }
+
+  const handleAnalyzeSplit = async () => {
+    setSplitAnalyzing(true)
+    try {
+      const payload = buildSplitRequest({
+        ...splitRatios,
+        sessionGapSeconds: splitSessionGap,
+        seed: splitSeed,
+      })
+      const result = await api.importSplitPreview(payload)
+      setSplitPreview(result)
+      showToast('วิเคราะห์ Train / Val / Test สำเร็จ')
+    } catch (err) {
+      setSplitPreview(null)
+      showToast(`วิเคราะห์ Split ล้มเหลว: ${err.message}`, 'error')
+    } finally {
+      setSplitAnalyzing(false)
+    }
+  }
+
+  const handleApplySplit = async () => {
+    if (!splitPreview?.plan_id) return
+    const summary = splitPreview.summary || {}
+    const confirmed = window.confirm(
+      `ยืนยันการจัด Split: ย้ายภาพ ${summary.image_moves || 0} ไฟล์, ` +
+      `ย้าย label ${summary.label_moves || 0} ไฟล์ และ quarantine ภาพซ้ำ ` +
+      `${summary.duplicates || 0} ไฟล์?`,
+    )
+    if (!confirmed) return
+    setSplitApplying(true)
+    try {
+      const result = await api.importSplitApply(splitPreview.plan_id)
+      setSplitPreview(null)
+      setSplitLatest({
+        manifest_id: result.manifest_id,
+        status: 'applied',
+        summary: result.summary,
+      })
+      refreshAll()
+      showToast('จัด Train / Val / Test สำเร็จ')
+    } catch (err) {
+      showToast(`Apply Split ล้มเหลว: ${err.message}`, 'error')
+    } finally {
+      setSplitApplying(false)
+    }
+  }
+
+  const handleUndoSplit = async () => {
+    if (!splitLatest?.manifest_id) return
+    if (!window.confirm('ยืนยันย้อนกลับการจัด Split ล่าสุด?')) return
+    setSplitUndoing(true)
+    try {
+      await api.importSplitUndo(splitLatest.manifest_id)
+      setSplitLatest(null)
+      setSplitPreview(null)
+      refreshAll()
+      showToast('ย้อนกลับการจัด Split สำเร็จ')
+    } catch (err) {
+      showToast(`Undo Split ล้มเหลว: ${err.message}`, 'error')
+    } finally {
+      setSplitUndoing(false)
+    }
+  }
+
   // --- Generate YAML ---
   const handleGenerateYaml = async () => {
     try {
@@ -463,9 +549,19 @@ export default function DataImport() {
       {/* ---- Split Info ---- */}
       {splitInfo && (
         <div className="card di-section">
-          <div className="card-title">สถิติชุดข้อมูล</div>
+          <div className="di-split-heading">
+            <div>
+              <div className="card-title">สถิติชุดข้อมูล</div>
+              <div className="di-split-subtitle">Train / Val / Test พร้อมการแยกกลุ่มตามช่วงเวลาถ่ายภาพ</div>
+            </div>
+            <span className="di-split-total">
+              {(splitInfo.train?.total || 0) + (splitInfo.val?.total || 0) + (splitInfo.test?.total || 0)} รูป
+            </span>
+          </div>
           <div className="di-split-stats">
-            {Object.entries(splitInfo).map(([key, val]) => (
+            {['train', 'val', 'test'].map(key => {
+              const val = splitInfo[key] || {}
+              return (
               <div className="di-split-card" key={key}>
                 <h4>
                   <Tag size={14} />
@@ -479,8 +575,164 @@ export default function DataImport() {
                   <span>Labels</span>
                   <span>{val.labels ?? 0}</span>
                 </div>
+                <div className="di-split-row">
+                  <span>Label coverage</span>
+                  <span>{Number(val.label_coverage || 0).toFixed(1)}%</span>
+                </div>
               </div>
-            ))}
+              )
+            })}
+          </div>
+
+          <div className="di-split-manager">
+            <div className="di-split-manager-head">
+              <div>
+                <h3>จัดสัดส่วนชุดข้อมูล</h3>
+                <span>ค่าเริ่มต้น 80 / 10 / 10 · Seed เดิมให้ผลซ้ำได้</span>
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={handleAnalyzeSplit}
+                disabled={splitAnalyzing || splitApplying || splitUndoing}
+              >
+                <BarChart3 size={15} />
+                {splitAnalyzing ? 'กำลังวิเคราะห์...' : 'Analyze Split'}
+              </button>
+            </div>
+
+            <div className="di-split-controls">
+              {['train', 'val', 'test'].map(key => (
+                <label key={key}>
+                  <span>{key.toUpperCase()} (%)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="98"
+                    step="1"
+                    value={splitRatios[key]}
+                    onChange={event => updateSplitRatio(key, event.target.value)}
+                  />
+                </label>
+              ))}
+              <label>
+                <span>Session gap (sec)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={splitSessionGap}
+                  onChange={event => {
+                    setSplitSessionGap(event.target.value)
+                    setSplitPreview(null)
+                  }}
+                />
+              </label>
+              <label>
+                <span>Seed</span>
+                <input
+                  type="number"
+                  step="1"
+                  value={splitSeed}
+                  onChange={event => {
+                    setSplitSeed(event.target.value)
+                    setSplitPreview(null)
+                  }}
+                />
+              </label>
+            </div>
+
+            {splitPreview && (
+              <div className="di-split-preview">
+                <div className="di-preview-head">
+                  <div>
+                    <h4>ผลวิเคราะห์ก่อน Apply</h4>
+                    <span>{splitPreview.summary?.capture_groups || 0} กลุ่ม · {splitPreview.summary?.canonical_images || 0} รูปไม่ซ้ำ</span>
+                  </div>
+                  <span className="di-plan-id">Plan {splitPreview.plan_id}</span>
+                </div>
+
+                <div className="di-preview-totals">
+                  {['train', 'val', 'test'].map(key => (
+                    <div key={key}>
+                      <span>{key.toUpperCase()}</span>
+                      <strong>{splitPreview.summary?.proposed?.[key] || 0}</strong>
+                    </div>
+                  ))}
+                  <div>
+                    <span>DUPLICATES</span>
+                    <strong>{splitPreview.summary?.duplicates || 0}</strong>
+                  </div>
+                </div>
+
+                <div className="di-split-table-wrap">
+                  <table className="di-split-table">
+                    <thead>
+                      <tr>
+                        <th>Workpiece</th>
+                        <th>Total</th>
+                        <th>Groups</th>
+                        <th>Train</th>
+                        <th>Val</th>
+                        <th>Test</th>
+                        <th>Labels</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {splitPreviewRows(splitPreview.summary?.per_workpiece).map(([workpiece, row]) => (
+                        <tr key={workpiece}>
+                          <td>{workpiece}</td>
+                          <td>{row.total}</td>
+                          <td>{row.groups}</td>
+                          <td>{row.train}</td>
+                          <td>{row.val}</td>
+                          <td>{row.test}</td>
+                          <td>{row.labels}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {(splitPreview.summary?.warnings || []).length > 0 && (
+                  <div className="di-split-warnings">
+                    {(splitPreview.summary?.warnings || []).map(warning => (
+                      <div key={warning}>{warning}</div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="di-split-actions">
+                  <div>
+                    ย้ายภาพ {splitPreview.summary?.image_moves || 0} · ย้าย labels {splitPreview.summary?.label_moves || 0}
+                  </div>
+                  <button
+                    className="btn btn-success"
+                    onClick={handleApplySplit}
+                    disabled={splitApplying || splitUndoing}
+                  >
+                    <Check size={15} />
+                    {splitApplying ? 'กำลัง Apply...' : 'Apply Split'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {splitLatest && (
+              <div className="di-split-latest">
+                <div>
+                  <span>Split ล่าสุดพร้อมย้อนกลับ</span>
+                  <code>{splitLatest.manifest_id}</code>
+                </div>
+                <button
+                  className="btn btn-outline"
+                  onClick={handleUndoSplit}
+                  disabled={splitApplying || splitUndoing}
+                >
+                  <RotateCcw size={15} />
+                  {splitUndoing ? 'กำลังย้อนกลับ...' : 'Undo'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
