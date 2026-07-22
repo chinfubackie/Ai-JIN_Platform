@@ -1,8 +1,11 @@
 # คู่มือการแบ่งชุดข้อมูล Train / Val / Test
 
-**ระบบ:** Ai-JIN Platform  
-**โมดูล:** Data Import - Group-aware Dataset Split  
-**ฉบับ:** 1.0 - 22 กรกฎาคม 2026  
+**ระบบ:** Ai-JIN Platform
+
+**โมดูล:** Data Import - Group-aware Dataset Split
+
+**ฉบับ:** 1.0 - 22 กรกฎาคม 2026
+
 **เส้นทางระบบ:** `D:\Ai-JIN_Platform`
 
 ---
@@ -206,6 +209,8 @@ Undo จะใช้ manifest เดิมเพื่อย้ายภาพ/l
 
 ---
 
-**เอกสารอ้างอิง:** `docs/platform-boundary.md`  
-**เจ้าของระบบ Platform:** `D:\Ai-JIN_Platform`  
+**เอกสารอ้างอิง:** `docs/platform-boundary.md`
+
+**เจ้าของระบบ Platform:** `D:\Ai-JIN_Platform`
+
 **App AI Camera:** `D:\Ai-JIN_V10.0_patch_output`
