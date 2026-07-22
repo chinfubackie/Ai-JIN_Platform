@@ -17,6 +17,7 @@ import uuid
 from dataclasses import asdict
 from pathlib import Path
 import db as _db
+import dataset_split as _dataset_split
 
 try:
     from dotenv import load_dotenv
@@ -70,6 +71,7 @@ _video_label_state = {
     "progress": 0,
     "log": "",
 }
+_dataset_split_lock = threading.Lock()
 
 
 def _video_label_snapshot():
@@ -1640,31 +1642,137 @@ def api_import_classes():
 
 @app.route("/api/import/split-info")
 def api_import_split_info():
-    """Get train/val split statistics"""
+    """Get train/validation/test split statistics."""
     info = {}
-    for split in ("train", "val"):
+    image_root = DATASET / "auto_improve" / "images"
+    label_root = DATASET / "auto_improve" / "labels"
+    for split in ("train", "val", "test"):
         d = DATASET / "auto_improve" / "images" / split
         classes = {}
-        total = 0
+        images = []
         if d.exists():
-            for sub in d.iterdir():
-                if sub.is_dir():
-                    count = sum(1 for f in sub.iterdir()
-                                if f.suffix.lower() in IMG_EXT)
-                    if count:
-                        classes[sub.name] = count
-                        total += count
-        info[split] = {"total": total, "classes": classes}
-    labels_dir = DATASET / "auto_improve" / "labels"
-    label_count = {"train": 0, "val": 0}
-    for split in ("train", "val"):
-        ld = labels_dir / split
-        if ld.exists():
-            for sub in ld.rglob("*.txt"):
-                label_count[split] += 1
-    info["train"]["labels"] = label_count["train"]
-    info["val"]["labels"] = label_count["val"]
+            images = [
+                path
+                for path in d.rglob("*")
+                if path.is_file() and path.suffix.lower() in IMG_EXT
+            ]
+            for image in images:
+                relative = image.relative_to(image_root / split)
+                identity = _dataset_split.parse_capture_identity(
+                    relative,
+                    image.name,
+                )
+                classes[identity.workpiece] = (
+                    classes.get(identity.workpiece, 0) + 1
+                )
+        label_dir = label_root / split
+        labels = (
+            list(label_dir.rglob("*.txt"))
+            if label_dir.exists()
+            else []
+        )
+        non_empty_labels = 0
+        for label in labels:
+            try:
+                if label.read_text(encoding="utf-8").strip():
+                    non_empty_labels += 1
+            except OSError:
+                continue
+        total = len(images)
+        info[split] = {
+            "total": total,
+            "classes": classes,
+            "labels": len(labels),
+            "non_empty_labels": non_empty_labels,
+            "label_coverage": (
+                round(len(labels) / total * 100, 1) if total else 0.0
+            ),
+        }
     return jsonify(info)
+
+
+def _dataset_split_db_update(old_path, new_path, split):
+    return _db.image_move_path(old_path, new_path, split)
+
+
+@app.route("/api/import/split/preview", methods=["POST"])
+def api_import_split_preview():
+    data = request.get_json(silent=True) or {}
+    try:
+        ratios = {
+            "train": float(data.get("train_ratio", 0.8)),
+            "val": float(data.get("val_ratio", 0.1)),
+            "test": float(data.get("test_ratio", 0.1)),
+        }
+        gap_seconds = int(data.get("session_gap_seconds", 30))
+        seed = int(data.get("seed", 42))
+        plan = _dataset_split.create_split_plan(
+            DATASET,
+            ratios,
+            gap_seconds,
+            seed,
+            IMG_EXT,
+        )
+        return jsonify(plan)
+    except (TypeError, ValueError, _dataset_split.SplitPlanError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/import/split/apply", methods=["POST"])
+def api_import_split_apply():
+    data = request.get_json(silent=True) or {}
+    plan_id = str(data.get("plan_id", "")).strip()
+    if not plan_id:
+        return jsonify({"ok": False, "error": "plan_id is required"}), 400
+    try:
+        with _dataset_split_lock:
+            result = _dataset_split.apply_split_plan(
+                DATASET,
+                plan_id,
+                on_path_changed=_dataset_split_db_update,
+            )
+        return jsonify(result)
+    except (
+        _dataset_split.StalePlanError,
+        _dataset_split.SplitConflictError,
+    ) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except _dataset_split.SplitApplyError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    except _dataset_split.SplitPlanError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/import/split/undo", methods=["POST"])
+def api_import_split_undo():
+    data = request.get_json(silent=True) or {}
+    manifest_id = str(data.get("manifest_id", "")).strip()
+    if not manifest_id:
+        return jsonify({
+            "ok": False,
+            "error": "manifest_id is required",
+        }), 400
+    try:
+        with _dataset_split_lock:
+            result = _dataset_split.undo_split_manifest(
+                DATASET,
+                manifest_id,
+                on_path_changed=_dataset_split_db_update,
+            )
+        return jsonify(result)
+    except _dataset_split.SplitConflictError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except _dataset_split.SplitApplyError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    except _dataset_split.SplitPlanError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/import/split/latest")
+def api_import_split_latest():
+    return jsonify({
+        "manifest": _dataset_split.latest_split_manifest(DATASET),
+    })
 
 
 @app.route("/api/dataset/folder-stats")
@@ -1767,7 +1875,8 @@ def api_generate_yaml():
     yaml_content = (
         f"path: {str(DATASET / 'auto_improve').replace(chr(92), '/')}\n"
         f"train: images/train\n"
-        f"val: images/val\n\n"
+        f"val: images/val\n"
+        f"test: images/test\n\n"
         f"nc: {len(classes)}\n"
         f"names: {classes}\n"
     )
