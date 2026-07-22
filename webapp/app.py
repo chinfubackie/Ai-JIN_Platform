@@ -1863,7 +1863,7 @@ def api_import_move():
 @app.route("/api/import/generate-yaml", methods=["POST"])
 def api_generate_yaml():
     """Generate data.yaml for YOLO training"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     classes = data.get("classes", [])
     if not classes:
         cls_d = DATASET / "auto_improve" / "images" / "train"
