@@ -791,6 +791,73 @@ th {
 .sidebar::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+@media (max-width: 760px) {
+  :root {
+    --topbar-h: 96px;
+  }
+
+  .topbar {
+    align-content: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    height: var(--topbar-h);
+    padding: 8px 12px;
+  }
+
+  .topbar-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .topbar-brand-sub {
+    display: none;
+  }
+
+  .topbar-right {
+    min-width: 0;
+  }
+
+  .topbar-center {
+    order: 3;
+    justify-content: flex-start;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .topbar-center::-webkit-scrollbar {
+    display: none;
+  }
+
+  .topbar-tab {
+    padding: 5px 10px;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main-content,
+  .sidebar-collapsed .main-content {
+    margin-left: 0;
+    padding: 16px 12px;
+  }
+
+  .main-content:has(.ann-page),
+  .main-content:has(.live-stream-page) {
+    height: calc(100vh - var(--topbar-h));
+  }
+
+  .page-header {
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+}
 .layout-toast {
   position: fixed;
   right: 24px;
