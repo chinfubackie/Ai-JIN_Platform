@@ -772,7 +772,7 @@ def api_images():
     per_page = int(request.args.get("per_page", 50))
     target = DATASET / subdir
     if not target.exists():
-        return jsonify({"images": [], "total": 0})
+        return jsonify({"images": [], "total": 0, "page": page, "pages": 0})
     all_imgs = sorted(
         [f for f in target.iterdir() if f.suffix.lower() in IMG_EXT],
         key=lambda f: f.name)
@@ -820,6 +820,8 @@ def api_label_save():
     data = request.json or {}
     img_rel = data.get("image_path", "")
     labels = data.get("labels", [])
+    if not img_rel:
+        return jsonify({"ok": False, "error": "image_path is required"}), 400
     img_path = _safe_path(DATASET, img_rel)
     if not img_path.exists():
         return jsonify({"ok": False, "error": "Image not found"}), 404
@@ -847,7 +849,10 @@ def api_predict():
         body["imgsz"] = request.form.get("imgsz", "640")
         body["model"] = request.form.get("model", "/app-models/best.pt")
     else:
-        body = request.json or {}
+        body = request.get_json(silent=True) or {}
+
+    if not body.get("image"):
+        return jsonify({"error": "No image provided"}), 400
 
     body["command"] = "predict"
     result = yolo_post(body)
@@ -1394,7 +1399,9 @@ def api_deploy_model():
     import shutil
     data = request.json or {}
     src = data.get("source", "")
-    if not src or not Path(src).exists():
+    if not src:
+        return jsonify({"ok": False, "error": "source is required"}), 400
+    if not Path(src).exists():
         return jsonify({"ok": False, "error": "Model file not found"}), 404
     dst = MODEL_DIR / "best.pt"
     backup = MODEL_DIR / f"best_backup_{time.strftime('%Y%m%d_%H%M%S')}.pt"
@@ -1765,6 +1772,7 @@ def api_generate_yaml():
         f"names: {classes}\n"
     )
     yaml_path = DATASET / "auto_improve" / "data.yaml"
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
     yaml_path.write_text(yaml_content, encoding="utf-8")
     cm_path = DATASET / "auto_improve" / "class_mapping.json"
     cm = {"model_to_class_id": {name: i for i, name in enumerate(classes)}}
