@@ -88,6 +88,7 @@ def test_generate_yaml_creates_empty_dataset_root(monkeypatch, tmp_path):
     data = response.get_json()
     assert data["ok"] is True
     assert Path(data["path"]).exists()
+    assert data["yaml"].startswith("path: .\n")
 
 
 def test_generate_yaml_accepts_post_without_json_body(monkeypatch, tmp_path):

@@ -74,6 +74,18 @@ def make_training_files(tmp_path):
     return model_path
 
 
+def test_training_readiness_falls_back_from_missing_absolute_yaml_root(monkeypatch, tmp_path):
+    app_mod = load_app(monkeypatch, tmp_path)
+    make_training_files(tmp_path)
+    data_yaml = tmp_path / "dataset" / "auto_improve" / "data.yaml"
+    readiness = app_mod._training_label_readiness(
+        data_yaml,
+        {"path": "Z:/not-mounted/auto_improve", "train": "images/train"},
+    )
+
+    assert readiness == {"total": 1, "labeled": 1}
+
+
 def test_train_status_uses_local_state_when_remote_server_is_offline(monkeypatch, tmp_path):
     app_mod = load_app(monkeypatch, tmp_path)
     monkeypatch.setattr(app_mod, "yolo_get", lambda path="/": {"status": "offline"})

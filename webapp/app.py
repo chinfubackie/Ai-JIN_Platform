@@ -380,9 +380,17 @@ def _resolve_training_data_path(data_ref):
 
 
 def _training_label_readiness(data_yaml, yaml_data):
-    dataset_root = Path(str(yaml_data.get("path") or "."))
-    if not dataset_root.is_absolute():
+    root_ref = str(yaml_data.get("path") or ".")
+    dataset_root = Path(root_ref)
+    windows_absolute = (
+        len(root_ref) >= 3
+        and root_ref[1] == ":"
+        and root_ref[2] in ("/", "\\")
+    )
+    if not dataset_root.is_absolute() and not windows_absolute:
         dataset_root = data_yaml.parent / dataset_root
+    if (dataset_root.is_absolute() or windows_absolute) and not dataset_root.exists():
+        dataset_root = data_yaml.parent
     dataset_root = dataset_root.resolve()
 
     train_refs = yaml_data.get("train") or "images/train"
@@ -1966,7 +1974,7 @@ def api_generate_yaml():
                     discovered.add(identity.workpiece)
         classes = sorted(discovered)
     yaml_content = (
-        f"path: {str(DATASET / 'auto_improve').replace(chr(92), '/')}\n"
+        "path: .\n"
         f"train: images/train\n"
         f"val: images/val\n"
         f"test: images/test\n\n"
