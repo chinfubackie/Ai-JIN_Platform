@@ -29,12 +29,13 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1GB upload limit (video files)
 
 # ── Config ────────────────────────────────────────────────────────────
+PLATFORM_ROOT = Path(__file__).resolve().parent.parent
 LS_URL = os.getenv("LABEL_STUDIO_URL", "http://localhost:8085")
 LS_TOKEN = os.getenv("LABEL_STUDIO_TOKEN", "")
 YOLO_URL = os.getenv("YOLO_TRAIN_URL", "http://localhost:8111")
-DATASET = Path(os.getenv("DATASET_PATH", r"D:\Ai-JIN_V10.0_patch_output\dataset"))
-RUNS = Path(os.getenv("RUNS_PATH", r"D:\Ai-JIN_V10.0_patch_output\runs"))
-MODEL_DIR = Path(os.getenv("MODEL_PATH", r"D:\Ai-JIN_Platform\models"))
+DATASET = Path(os.getenv("DATASET_PATH", str(PLATFORM_ROOT / "dataset")))
+RUNS = Path(os.getenv("RUNS_PATH", str(PLATFORM_ROOT / "runs")))
+MODEL_DIR = Path(os.getenv("MODEL_PATH", str(PLATFORM_ROOT / "models")))
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
 VIDEO_EXT = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 MAX_IMPORT_BATCH = 1500
