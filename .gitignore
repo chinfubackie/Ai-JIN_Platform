@@ -1,5 +1,6 @@
 node_modules/
 .worktrees/
+legacy/
 __pycache__/
 *.pyc
 .env
