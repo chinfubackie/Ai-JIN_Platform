@@ -2,6 +2,7 @@
 db.py — SQLite database layer for AI-JIN Platform
 Uses Python built-in sqlite3, no ORM required.
 """
+import os
 import sqlite3
 import json
 import time
@@ -9,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime
 
-DB_PATH = Path(__file__).parent / "aijin.db"
+DB_PATH = Path(os.getenv("AIJIN_DB_PATH", str(Path(__file__).parent / "aijin.db")))
 
 
 @contextmanager
