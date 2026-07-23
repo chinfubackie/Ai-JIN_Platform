@@ -119,10 +119,33 @@ def init_db():
             created_at TEXT    NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS cam_zones (
+            id          TEXT PRIMARY KEY,
+            cam_key     TEXT NOT NULL,
+            name        TEXT DEFAULT '',
+            label       TEXT DEFAULT '',
+            points_json TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS cam_lines (
+            id          TEXT PRIMARY KEY,
+            cam_key     TEXT NOT NULL,
+            name        TEXT DEFAULT '',
+            x1          REAL NOT NULL,
+            y1          REAL NOT NULL,
+            x2          REAL NOT NULL,
+            y2          REAL NOT NULL,
+            direction   TEXT DEFAULT 'both',
+            created_at  TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_images_project ON images(project_id);
         CREATE INDEX IF NOT EXISTS idx_annotations_image ON annotations(image_id);
         CREATE INDEX IF NOT EXISTS idx_training_runs_project ON training_runs(project_id);
         CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_cam_zones_key ON cam_zones(cam_key);
+        CREATE INDEX IF NOT EXISTS idx_cam_lines_key ON cam_lines(cam_key);
         """)
 
 
@@ -519,3 +542,55 @@ def sync_images_from_disk(project_id, dataset_dir, img_ext=None):
                 """, (project_id, rel, f.name, split, labeled, ann_count, t, t))
             added += 1
     return added
+
+
+# ── Camera zone/line persistence ──────────────────────────────────────
+
+def save_cam_zone(cam_key: str, zone: dict):
+    """Upsert a zone for a camera (keyed by source)."""
+    with get_db() as con:
+        con.execute("""
+            INSERT INTO cam_zones(id, cam_key, name, label, points_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name, label=excluded.label, points_json=excluded.points_json
+        """, (zone["id"], cam_key, zone.get("name", ""), zone.get("label", ""),
+              json.dumps(zone.get("points", [])), now_iso()))
+
+
+def delete_cam_zone(zone_id: str):
+    with get_db() as con:
+        con.execute("DELETE FROM cam_zones WHERE id=?", (zone_id,))
+
+
+def load_cam_zones(cam_key: str) -> list:
+    with get_db() as con:
+        rows = con.execute("SELECT * FROM cam_zones WHERE cam_key=? ORDER BY created_at", (cam_key,)).fetchall()
+    return [{"id": r["id"], "name": r["name"], "label": r["label"],
+             "points": json.loads(r["points_json"])} for r in rows]
+
+
+def save_cam_line(cam_key: str, line: dict):
+    """Upsert a counting line for a camera."""
+    with get_db() as con:
+        con.execute("""
+            INSERT INTO cam_lines(id, cam_key, name, x1, y1, x2, y2, direction, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name, x1=excluded.x1, y1=excluded.y1,
+                x2=excluded.x2, y2=excluded.y2, direction=excluded.direction
+        """, (line["id"], cam_key, line.get("name", ""),
+              line["x1"], line["y1"], line["x2"], line["y2"],
+              line.get("direction", "both"), now_iso()))
+
+
+def delete_cam_line(line_id: str):
+    with get_db() as con:
+        con.execute("DELETE FROM cam_lines WHERE id=?", (line_id,))
+
+
+def load_cam_lines(cam_key: str) -> list:
+    with get_db() as con:
+        rows = con.execute("SELECT * FROM cam_lines WHERE cam_key=? ORDER BY created_at", (cam_key,)).fetchall()
+    return [{"id": r["id"], "name": r["name"], "x1": r["x1"], "y1": r["y1"],
+             "x2": r["x2"], "y2": r["y2"], "direction": r["direction"]} for r in rows]

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Trash2, Play, Square, Camera, Settings, AlertCircle,
   CheckCircle2, Monitor, Wifi, WifiOff, RefreshCw, Download,
-  TrendingUp, Target, SquareStack, Laptop,
+  TrendingUp, Target, SquareStack, Laptop, Cpu, Zap, PackageOpen,
+  RotateCcw, BrainCircuit, SlidersHorizontal,
 } from 'lucide-react'
 import VideoPlayer from '../components/VideoPlayer'
 import { api } from '../api/client'
@@ -33,7 +34,8 @@ function CameraCard({ cam, onRemove, onStart, onStop, onSelect }) {
       {isOnline && (
         <div className="cam-card-stats">
           <span>{cam.fps?.toFixed(1)} FPS</span>
-          <span>Frame #{cam.frame_count}</span>
+          <span>#{cam.frame_count}</span>
+          {cam.model && <span className="cam-model-chip"><BrainCircuit size={10} />{modelBasename(cam.model)}</span>}
         </div>
       )}
       {isError && <div className="cam-card-error">{cam.error}</div>}
@@ -56,6 +58,11 @@ function CameraCard({ cam, onRemove, onStart, onStop, onSelect }) {
   )
 }
 
+const modelBasename = (path) => {
+  if (!path) return null
+  return path.split(/[\\/]/).pop()
+}
+
 /* ---------- Main Page ---------- */
 export default function LiveStream() {
   const [cameras, setCameras] = useState([])
@@ -65,6 +72,19 @@ export default function LiveStream() {
   const [newCamSource, setNewCamSource] = useState('')
   const [newCamName, setNewCamName] = useState('')
   const [newCamFps, setNewCamFps] = useState(15)
+  const [newCamModel, setNewCamModel] = useState('')
+  const [newCamDevice, setNewCamDevice] = useState('cpu')
+  const [availableModels, setAvailableModels] = useState([])
+  const [availableDevices, setAvailableDevices] = useState([{ id: 'cpu', name: 'CPU', type: 'cpu' }])
+  const [exportFormats, setExportFormats] = useState([])
+
+  // Export panel state
+  const [exportModel, setExportModel] = useState('')
+  const [exportFormat, setExportFormat] = useState('onnx')
+  const [exportDevice, setExportDevice] = useState('cpu')
+  const [exportHalf, setExportHalf] = useState(false)
+  const [exportStatus, setExportStatus] = useState(null) // null | 'loading' | {ok, output, error}
+  const [resetting, setResetting] = useState(false)
   const [error, setError] = useState(null)
 
   // กล้องที่แท็บนี้กำลัง capture ให้ (ใช้ getUserMedia ของเครื่องผู้ใช้เอง)
@@ -76,6 +96,15 @@ export default function LiveStream() {
 
   const [streamUrl, setStreamUrl] = useState(null)
   const [countStats, setCountStats] = useState(null)
+  const [detections, setDetections] = useState([])
+
+  // Inference settings (local, synced from selected cam)
+  const [localConf, setLocalConf] = useState(0.25)
+  const [localIou, setLocalIou] = useState(0.45)
+  const [localImgsz, setLocalImgsz] = useState(640)
+  const [localDevice, setLocalDevice] = useState('cpu')
+  const [localModel, setLocalModel] = useState('')
+  const [applyingConfig, setApplyingConfig] = useState(false)
 
   const [zones, setZones] = useState([])
   const [lines, setLines] = useState([])
@@ -106,6 +135,14 @@ export default function LiveStream() {
 
   useEffect(() => { loadCameras() }, [loadCameras])
 
+  useEffect(() => {
+    api.models().then(r => setAvailableModels(r.models || [])).catch(() => {})
+    api.systemDevices().then(r => {
+      if (r.devices) setAvailableDevices(r.devices)
+      if (r.export_formats) setExportFormats(r.export_formats)
+    }).catch(() => {})
+  }, [])
+
   // Zone/line config for selected camera
   const loadCountingConfig = useCallback(async (camId) => {
     if (!camId) { setZones([]); setLines([]); return }
@@ -121,8 +158,21 @@ export default function LiveStream() {
 
   useEffect(() => {
     setDraftShape(null)
+    setDetections([])
+    setCountStats(null)
     loadCountingConfig(selectedCamera?.id)
   }, [selectedCamera, loadCountingConfig])
+
+  // Sync inference settings when switching cameras
+  useEffect(() => {
+    const cam = cameras.find(c => c.id === selectedCamera?.id)
+    if (!cam) return
+    if (cam.conf_threshold != null) setLocalConf(cam.conf_threshold)
+    if (cam.iou_threshold != null) setLocalIou(cam.iou_threshold)
+    if (cam.imgsz != null) setLocalImgsz(cam.imgsz)
+    if (cam.device != null) setLocalDevice(cam.device)
+    if (cam.model_path != null) setLocalModel(cam.model_path)
+  }, [selectedCamera?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // SSE stream
   useEffect(() => {
@@ -136,6 +186,7 @@ export default function LiveStream() {
       try {
         const data = JSON.parse(event.data)
         if (data.type === 'result') {
+          if (data.detections) setDetections(data.detections)
           setCountStats(data)
         }
       } catch {}
@@ -200,9 +251,15 @@ export default function LiveStream() {
   const handleAdd = async () => {
     try {
       if (addMode === 'browser') {
-        const res = await api.cameraAddBrowser({ name: newCamName.trim() || 'กล้องเครื่องนี้' })
+        const res = await api.cameraAddBrowser({
+          name: newCamName.trim() || 'กล้องเครื่องนี้',
+          model_path: newCamModel,
+          device: newCamDevice,
+        })
         setNewCamSource('')
         setNewCamName('')
+        setNewCamModel('')
+        setNewCamDevice('cpu')
         setShowAddForm(false)
         await loadCameras()
         await startBrowserCapture(res.id, newCamFps)
@@ -214,10 +271,14 @@ export default function LiveStream() {
         source: newCamSource.trim(),
         name: newCamName.trim() || newCamSource.trim(),
         fps_target: newCamFps,
+        model_path: newCamModel,
+        device: newCamDevice,
       })
       setNewCamSource('')
       setNewCamName('')
       setNewCamFps(15)
+      setNewCamModel('')
+      setNewCamDevice('cpu')
       setShowAddForm(false)
       await loadCameras()
     } catch (err) {
@@ -264,7 +325,7 @@ export default function LiveStream() {
   }
 
   const selectedCamData = cameras.find(c => c.id === selectedCamera?.id)
-  const canDraw = selectedCamData?.status === 'streaming'
+  const canDraw = !!selectedCamData  // วาดได้ทันทีที่เลือกกล้อง ไม่ต้องรอ stream
 
   // Zone/line drawing
   const handleOverlayClick = (e) => {
@@ -335,6 +396,22 @@ export default function LiveStream() {
     a.download = `counting-stats-cam${selectedCamData?.id ?? ''}-${Date.now()}.json`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleApplyConfig = async () => {
+    if (!selectedCamData) return
+    setApplyingConfig(true)
+    try {
+      await api.cameraUpdateConfig(selectedCamData.id, {
+        conf_threshold: localConf,
+        iou_threshold: localIou,
+        imgsz: localImgsz,
+        device: localDevice,
+        model_path: localModel,
+      })
+      await loadCameras()
+    } catch { setError('ไม่สามารถอัปเดตค่า inference ได้') }
+    setApplyingConfig(false)
   }
 
   const zoneName = (id) => zones.find(z => z.id === id)?.name || id
@@ -413,6 +490,29 @@ export default function LiveStream() {
                   : 'แนะนำ 5-15 FPS สำหรับสายผลิตทั่วไป'}
               </span>
             </div>
+            <div className="form-group">
+              <label>โมเดล YOLO</label>
+              <select value={newCamModel} onChange={e => setNewCamModel(e.target.value)}>
+                <option value="">ใช้โมเดลที่ deploy ล่าสุด (ค่าเริ่มต้น)</option>
+                {availableModels.map(m => (
+                  <option key={m.best_pt} value={m.best_pt}>
+                    {m.name || m.run}{m.mAP50 ? ` — mAP50: ${(m.mAP50 * 100).toFixed(1)}%` : ''} ({m.best_size_mb} MB)
+                  </option>
+                ))}
+              </select>
+              <span className="form-hint">เลือกโมเดลที่ต้องการใช้สำหรับกล้องนี้</span>
+            </div>
+            <div className="form-group">
+              <label><Cpu size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />Device (Inference)</label>
+              <select value={newCamDevice} onChange={e => setNewCamDevice(e.target.value)}>
+                {availableDevices.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.type === 'cuda' ? '⚡ ' : ''}{d.name}
+                  </option>
+                ))}
+              </select>
+              <span className="form-hint">GPU ประมวลผลเร็วกว่า CPU — ต้องมี CUDA</span>
+            </div>
           </div>
           {addMode === 'browser' && (
             <div className="form-hint" style={{ marginBottom: 8 }}>
@@ -439,32 +539,8 @@ export default function LiveStream() {
       )}
 
       <div className="live-stream-layout">
-        {/* Left: Camera list */}
-        <div className="cam-list-panel">
-          <div className="card">
-            <div className="card-title"><Camera size={18} /> กล้องของฉัน</div>
-            {cameras.length === 0 ? (
-              <div className="cam-list-empty">
-                ยังไม่มีกล้อง กด "เพิ่มกล้อง" เพื่อเริ่มต้น
-              </div>
-            ) : (
-              <div className="cam-list">
-                {cameras.map(cam => (
-                  <CameraCard
-                    key={cam.id}
-                    cam={cam}
-                    onRemove={handleRemove}
-                    onStart={handleStart}
-                    onStop={handleStop}
-                    onSelect={setSelectedCamera}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Center: Live Stream */}
+        {/* Left: Full-height video */}
         <div className="stream-panel">
           <div className="card stream-card">
             <div className="card-title">
@@ -481,12 +557,12 @@ export default function LiveStream() {
             {selectedCamData ? (
               <div className="stream-container">
                 <div className="stream-video-wrap">
+
+                  {/* Video content */}
                   {selectedCamData.status === 'streaming' ? (
                     <>
                       <VideoPlayer streamUrl={streamUrl} />
-                      {!streamUrl && (
-                        <div className="stream-loading">กำลังเชื่อมต่อสตรีม...</div>
-                      )}
+                      {!streamUrl && <div className="stream-loading">กำลังเชื่อมต่อสตรีม...</div>}
                     </>
                   ) : selectedCamData.status === 'error' ? (
                     <div className="stream-error">
@@ -499,14 +575,36 @@ export default function LiveStream() {
                   ) : (
                     <div className="stream-idle">
                       <Camera size={48} />
-                      <span>กล้องพร้อมใช้งาน กดเปิดเพื่อเริ่ม</span>
+                      <span>กล้องพร้อมใช้งาน</span>
                       <button className="btn btn-primary" onClick={() => handleStart(selectedCamData.id)}>
                         <Play size={14} /> เปิดสตรีม
                       </button>
+                      {draftShape && (
+                        <p className="idle-draw-hint">คลิกบนพื้นที่นี้เพื่อวางจุด</p>
+                      )}
                     </div>
                   )}
 
-                  {/* Zone/line overlay */}
+                  {/* Detection bbox overlay */}
+                  {detections.length > 0 && (
+                    <svg className="zone-overlay bbox-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"
+                      style={{ pointerEvents: 'none' }}>
+                      {detections.map((d, i) => {
+                        const [x1, y1, x2, y2] = d.bbox
+                        return (
+                          <g key={i}>
+                            <rect className="bbox-rect" x={x1 * 100} y={y1 * 100}
+                              width={(x2 - x1) * 100} height={(y2 - y1) * 100} />
+                            <text className="bbox-label" x={x1 * 100 + 0.5} y={y1 * 100 - 0.8}>
+                              {d.class_name} {Math.round(d.confidence * 100)}%
+                            </text>
+                          </g>
+                        )
+                      })}
+                    </svg>
+                  )}
+
+                  {/* Zone/line overlay — แสดงตลอดเมื่อเลือกกล้องแล้ว */}
                   <svg
                     className="zone-overlay"
                     viewBox="0 0 100 100"
@@ -515,37 +613,29 @@ export default function LiveStream() {
                     style={{ pointerEvents: draftShape ? 'auto' : 'none', cursor: draftShape ? 'crosshair' : 'default' }}
                   >
                     {zones.map(z => (
-                      <polygon
-                        key={z.id}
-                        className="zone-shape"
-                        points={z.points.map(p => `${p[0] * 100},${p[1] * 100}`).join(' ')}
-                      />
+                      <polygon key={z.id} className="zone-shape"
+                        points={z.points.map(p => `${p[0] * 100},${p[1] * 100}`).join(' ')} />
                     ))}
                     {lines.map(l => (
-                      <line
-                        key={l.id}
-                        className="line-shape"
-                        x1={l.x1 * 100} y1={l.y1 * 100} x2={l.x2 * 100} y2={l.y2 * 100}
-                      />
+                      <line key={l.id} className="line-shape"
+                        x1={l.x1 * 100} y1={l.y1 * 100} x2={l.x2 * 100} y2={l.y2 * 100} />
                     ))}
                     {draftShape?.points.length > 0 && (
-                      <polyline
-                        className="draft-shape"
-                        points={draftShape.points.map(p => `${p[0] * 100},${p[1] * 100}`).join(' ')}
-                      />
+                      <polyline className="draft-shape"
+                        points={draftShape.points.map(p => `${p[0] * 100},${p[1] * 100}`).join(' ')} />
                     )}
                     {draftShape?.points.map((p, i) => (
-                      <circle key={i} className="draft-point" cx={p[0] * 100} cy={p[1] * 100} r="1" />
+                      <circle key={i} className="draft-point" cx={p[0] * 100} cy={p[1] * 100} r="1.2" />
                     ))}
                   </svg>
 
-                  {/* Draft shape toolbar */}
+                  {/* Draw toolbar — แสดงขณะกำลังวาด */}
                   {draftShape && (
                     <div className="draft-toolbar">
                       <span>
                         {draftShape.type === 'zone'
-                          ? `กำลังวาดโซน (${draftShape.points.length} จุด, อย่างน้อย 3)`
-                          : `กำลังวาดเส้นนับ (${draftShape.points.length}/2 จุด)`}
+                          ? `วาดโซน — ${draftShape.points.length} จุด (ต้องการ ≥ 3)`
+                          : `วาดเส้นนับ — ${draftShape.points.length}/2 จุด`}
                       </span>
                       {shapeReady && (
                         <>
@@ -556,10 +646,8 @@ export default function LiveStream() {
                             onChange={e => setDraftShape(d => ({ ...d, name: e.target.value }))}
                           />
                           {draftShape.type === 'line' && (
-                            <select
-                              value={draftShape.direction}
-                              onChange={e => setDraftShape(d => ({ ...d, direction: e.target.value }))}
-                            >
+                            <select value={draftShape.direction}
+                              onChange={e => setDraftShape(d => ({ ...d, direction: e.target.value }))}>
                               <option value="both">ทั้งสองทิศทาง</option>
                               <option value="left_to_right">ซ้าย → ขวา</option>
                               <option value="right_to_left">ขวา → ซ้าย</option>
@@ -576,114 +664,269 @@ export default function LiveStream() {
                 </div>
 
                 {/* Stream Info Bar */}
-                {selectedCamData && (
-                  <div className="stream-info-bar">
-                    <span><Wifi size={12} /> {selectedCamData.fps?.toFixed(1) || 0} FPS</span>
-                    <span><SquareStack size={12} /> Frame #{selectedCamData.frame_count || 0}</span>
-                    <span><Settings size={12} /> {selectedCamData.source}</span>
-                  </div>
-                )}
+                <div className="stream-info-bar">
+                  <span><Wifi size={12} /> {selectedCamData.fps?.toFixed(1) || 0} FPS</span>
+                  <span><SquareStack size={12} /> Frame #{selectedCamData.frame_count || 0}</span>
+                  <span className="info-model">
+                    <BrainCircuit size={12} />
+                    {modelBasename(selectedCamData.model) || <span className="model-idle">ยังไม่รันโมเดล</span>}
+                  </span>
+                  <span className="info-source"><Settings size={12} /> {selectedCamData.source}</span>
+                </div>
               </div>
             ) : (
               <div className="stream-placeholder">
-                <Camera size={64} />
-                <span>คลิกเลือกกล้องจากด้านซ้าย</span>
+                <Camera size={56} />
+                <span>เลือกกล้องจาก sidebar ขวา</span>
               </div>
             )}
           </div>
-        </div>
+        </div>{/* /stream-panel */}
 
-        {/* Right: Counting Stats */}
-        <div className="stats-panel">
-          <div className="card">
-            <div className="card-title"><TrendingUp size={18} /> จำนวนนับ</div>
+        {/* Right: Sidebar — camera list + stats + config */}
+        <div className="sidebar">
+
+          {/* Section: Camera list */}
+          <div className="sb-section sb-cameras">
+            <div className="sb-header">
+              <Camera size={14} /> กล้อง
+              <span className="sb-badge">{cameras.length}</span>
+            </div>
+            {cameras.length === 0 ? (
+              <div className="sb-empty">กด "เพิ่มกล้อง" เพื่อเริ่มต้น</div>
+            ) : (
+              <div className="cam-list">
+                {cameras.map(cam => (
+                  <CameraCard
+                    key={cam.id}
+                    cam={cam}
+                    onRemove={handleRemove}
+                    onStart={handleStart}
+                    onStop={handleStop}
+                    onSelect={setSelectedCamera}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Section: Count stats */}
+          <div className="sb-section sb-counts">
+            <div className="sb-header"><TrendingUp size={14} /> จำนวนนับ
+              <div className="sb-header-actions">
+                <button
+                  className="sb-icon-btn"
+                  title="รีเซ็ตตัวนับ"
+                  disabled={!selectedCamData || resetting}
+                  onClick={async () => {
+                    if (!selectedCamData) return
+                    setResetting(true)
+                    try { await api.countingReset(selectedCamData.id) } catch {}
+                    setResetting(false)
+                  }}
+                >
+                  <RotateCcw size={13} className={resetting ? 'spin' : ''} />
+                </button>
+                {countStats && (
+                  <button className="sb-icon-btn" title="Export stats" onClick={handleExportStats}>
+                    <Download size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
             {countStats ? (
-              <div className="count-stats">
-                <div className="count-item-main">
-                  <span className="count-label">ทั้งหมด</span>
-                  <span className="count-value">
+              <>
+                <div className="count-total">
+                  <span>ทั้งหมด</span>
+                  <span className="count-total-num">
                     {Object.values(countStats.total_class_counts || {}).reduce((a, b) => a + b, 0)}
                   </span>
                 </div>
                 {Object.entries(countStats.total_class_counts || {}).map(([cls, cnt]) => (
-                  <div key={cls} className="count-item">
+                  <div key={cls} className="count-row">
                     <span className="count-label">{cls}</span>
-                    <span className="count-value">{cnt}</span>
+                    <span className="count-val">{cnt}</span>
                   </div>
                 ))}
                 {countStats.zone_counts && Object.keys(countStats.zone_counts).length > 0 && (
                   <>
-                    <div className="count-section-title"><Target size={14} /> โซน</div>
-                    {Object.entries(countStats.zone_counts).map(([zone, cnt]) => (
-                      <div key={zone} className="count-item">
-                        <span className="count-label">{zoneName(zone)}</span>
-                        <span className="count-value">{cnt}</span>
+                    <div className="count-group-label"><Target size={11} /> โซน</div>
+                    {Object.entries(countStats.zone_counts).map(([z, cnt]) => (
+                      <div key={z} className="count-row">
+                        <span className="count-label">{zoneName(z)}</span>
+                        <span className="count-val">{cnt}</span>
                       </div>
                     ))}
                   </>
                 )}
                 {countStats.line_counts && Object.keys(countStats.line_counts).length > 0 && (
                   <>
-                    <div className="count-section-title"><SquareStack size={14} /> เส้นนับ</div>
-                    {Object.entries(countStats.line_counts).map(([line, cnt]) => (
-                      <div key={line} className="count-item">
-                        <span className="count-label">{lineName(line)}</span>
-                        <span className="count-value">{cnt}</span>
+                    <div className="count-group-label"><SquareStack size={11} /> เส้นนับ</div>
+                    {Object.entries(countStats.line_counts).map(([l, cnt]) => (
+                      <div key={l} className="count-row">
+                        <span className="count-label">{lineName(l)}</span>
+                        <span className="count-val">{cnt}</span>
                       </div>
                     ))}
                   </>
                 )}
-              </div>
+              </>
             ) : (
-              <div className="stats-empty">รอสตรีมกล้องเพื่อดูจำนวนนับ</div>
+              <div className="sb-empty">รอสตรีมกล้อง...</div>
             )}
           </div>
 
-          {/* Quick Actions */}
-          <div className="card stats-actions-card">
-            <div className="card-title"><Settings size={18} /> ตั้งค่าโซนนับ</div>
-            <div className="quick-actions">
+          {/* Section: Zone / Line drawing */}
+          <div className="sb-section">
+            <div className="sb-header"><Target size={14} /> โซน / เส้นนับ</div>
+            <div className="sb-btn-row">
               <button
                 className={`btn btn-sm ${draftShape?.type === 'zone' ? 'btn-primary' : 'btn-outline'}`}
                 disabled={!canDraw}
                 onClick={() => toggleDraw('zone')}
               >
-                <Target size={14} /> {draftShape?.type === 'zone' ? 'ยกเลิกวาดโซน' : 'โซนนับ'}
+                <Target size={12} /> {draftShape?.type === 'zone' ? 'ยกเลิก' : 'โซน'}
               </button>
               <button
                 className={`btn btn-sm ${draftShape?.type === 'line' ? 'btn-primary' : 'btn-outline'}`}
                 disabled={!canDraw}
                 onClick={() => toggleDraw('line')}
               >
-                <SquareStack size={14} /> {draftShape?.type === 'line' ? 'ยกเลิกวาดเส้น' : 'เส้นนับ'}
-              </button>
-              <button className="btn btn-outline btn-sm" disabled={!countStats} onClick={handleExportStats}>
-                <Download size={14} /> Export
+                <SquareStack size={12} /> {draftShape?.type === 'line' ? 'ยกเลิก' : 'เส้น'}
               </button>
             </div>
             {(zones.length > 0 || lines.length > 0) && (
               <div className="shape-list">
                 {zones.map(z => (
                   <div key={z.id} className="shape-chip">
-                    <Target size={12} />
-                    <span>{z.name || z.id}</span>
-                    <button onClick={() => handleRemoveZone(z.id)} title="ลบโซนนี้">✕</button>
+                    <Target size={11} /><span>{z.name || z.id}</span>
+                    <button onClick={() => handleRemoveZone(z.id)}>✕</button>
                   </div>
                 ))}
                 {lines.map(l => (
                   <div key={l.id} className="shape-chip">
-                    <SquareStack size={12} />
-                    <span>{l.name || l.id}</span>
-                    <button onClick={() => handleRemoveLine(l.id)} title="ลบเส้นนี้">✕</button>
+                    <SquareStack size={11} /><span>{l.name || l.id}</span>
+                    <button onClick={() => handleRemoveLine(l.id)}>✕</button>
                   </div>
                 ))}
               </div>
             )}
-            <div className="stats-hint">
-              {canDraw ? 'กดปุ่มด้านบนแล้วคลิกบนวิดีโอเพื่อวาดโซน/เส้นนับ' : 'เปิดสตรีมกล้องก่อนจึงจะวาดโซน/เส้นนับได้'}
-            </div>
+            {!selectedCamData && <div className="sb-hint">เลือกกล้องก่อนวาด</div>}
+            {selectedCamData && !draftShape && <div className="sb-hint">กดปุ่มแล้วคลิกบนวิดีโอ</div>}
           </div>
-        </div>
+
+          {/* Section: Inference settings */}
+          {selectedCamData && (
+            <div className="sb-section sb-infer">
+              <div className="sb-header"><SlidersHorizontal size={14} /> Inference</div>
+              <div className="sb-infer-row">
+                <label>Conf <span className="infer-val">{localConf.toFixed(2)}</span></label>
+                <input type="range" min="0.05" max="0.95" step="0.05"
+                  value={localConf} onChange={e => setLocalConf(parseFloat(e.target.value))} />
+              </div>
+              <div className="sb-infer-row">
+                <label>IoU <span className="infer-val">{localIou.toFixed(2)}</span></label>
+                <input type="range" min="0.1" max="0.9" step="0.05"
+                  value={localIou} onChange={e => setLocalIou(parseFloat(e.target.value))} />
+              </div>
+              <div className="form-group">
+                <label>Model Size (imgsz)</label>
+                <select value={localImgsz} onChange={e => setLocalImgsz(parseInt(e.target.value))}>
+                  <option value={320}>320 (เร็ว)</option>
+                  <option value={480}>480</option>
+                  <option value={640}>640 (แนะนำ)</option>
+                  <option value={960}>960</option>
+                  <option value={1280}>1280 (ละเอียด)</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Device</label>
+                <select value={localDevice} onChange={e => setLocalDevice(e.target.value)}>
+                  {availableDevices.map(d => (
+                    <option key={d.id} value={d.id}>{d.type === 'cuda' ? '⚡ ' : ''}{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>โมเดล</label>
+                <select value={localModel} onChange={e => setLocalModel(e.target.value)}>
+                  <option value="">โมเดลที่ deploy ล่าสุด</option>
+                  {availableModels.map(m => (
+                    <option key={m.best_pt} value={m.best_pt}>{m.name || m.run}</option>
+                  ))}
+                </select>
+              </div>
+              <button className="btn btn-primary btn-sm" style={{ width: '100%' }}
+                disabled={applyingConfig} onClick={handleApplyConfig}>
+                <Settings size={12} /> {applyingConfig ? 'กำลังบันทึก...' : 'Apply'}
+              </button>
+            </div>
+          )}
+
+        </div>{/* /sidebar */}
+
+        {/* Right: Export panel */}
+        <div className="card export-panel">
+          <div className="card-title"><PackageOpen size={16} /> Export โมเดล</div>
+          <div className="form-group">
+            <label>โมเดล</label>
+            <select value={exportModel} onChange={e => setExportModel(e.target.value)}>
+              <option value="">best.pt (deploy อยู่)</option>
+              {availableModels.map(m => (
+                <option key={m.best_pt} value={m.best_pt}>{m.name || m.run} ({m.best_size_mb} MB)</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Format</label>
+            <select value={exportFormat} onChange={e => setExportFormat(e.target.value)}>
+              {exportFormats.length > 0 ? exportFormats.map(f => (
+                <option key={f.value} value={f.value}>{f.recommended ? '★ ' : ''}{f.label}</option>
+              )) : (
+                <>
+                  <option value="engine">★ TensorRT (NVIDIA GPU)</option>
+                  <option value="onnx">ONNX (ทั่วไป)</option>
+                  <option value="openvino">OpenVINO (Intel CPU)</option>
+                  <option value="tflite">TFLite (Mobile)</option>
+                </>
+              )}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Device</label>
+            <select value={exportDevice} onChange={e => setExportDevice(e.target.value)}>
+              {availableDevices.map(d => (
+                <option key={d.id} value={d.id}>{d.type === 'cuda' ? '⚡ ' : ''}{d.name}</option>
+              ))}
+            </select>
+          </div>
+          <label className="fp16-label" style={{ marginTop: 2 }}>
+            <input type="checkbox" checked={exportHalf} onChange={e => setExportHalf(e.target.checked)} />
+            FP16 Half Precision
+          </label>
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ width: '100%', marginTop: 4 }}
+            disabled={exportStatus === 'loading'}
+            onClick={async () => {
+              setExportStatus('loading')
+              try {
+                const r = await api.exportModelLocal({ model_path: exportModel, format: exportFormat, device: exportDevice, half: exportHalf })
+                setExportStatus(r)
+              } catch (e) {
+                setExportStatus({ ok: false, error: String(e) })
+              }
+            }}
+          >
+            <Zap size={13} /> {exportStatus === 'loading' ? 'กำลัง Export...' : 'Export'}
+          </button>
+          {exportStatus && exportStatus !== 'loading' && (
+            <div className={`export-result ${exportStatus.ok ? 'ok' : 'err'}`}>
+              {exportStatus.ok ? <>✓ <code>{exportStatus.output}</code></> : <>✕ {exportStatus.error}</>}
+            </div>
+          )}
+        </div>{/* /export-panel */}
+
       </div>
     </div>
   )
