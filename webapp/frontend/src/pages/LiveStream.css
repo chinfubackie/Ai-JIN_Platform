@@ -40,10 +40,11 @@
 /* ── Main layout ── */
 .live-stream-layout {
   display: grid;
-  grid-template-columns: 1fr 240px 220px;
+  grid-template-columns: 1fr 240px var(--export-col-w, 220px);
   gap: 12px;
   flex: 1;
   min-height: 0;
+  transition: grid-template-columns 0.15s ease;
 }
 
 /* ── Stream panel (left) ── */
@@ -550,7 +551,9 @@
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
+  overflow-x: hidden;
   height: 100%;
+  min-width: 0;
 }
 
 .export-panel .card-title {
@@ -559,6 +562,35 @@
   border-bottom: 1px solid var(--border);
   margin-bottom: 2px;
 }
+
+/* พับเก็บแถบ Export — เหลือแค่แถบไอคอนแคบ ๆ เพื่อคืนพื้นที่ให้วิดีโอ */
+.export-panel.collapsed {
+  align-items: center;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.export-panel.collapsed .card-title {
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.panel-collapse-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.panel-collapse-btn:hover { color: var(--text-primary); background: var(--bg-dark); }
+.export-panel.collapsed .panel-collapse-btn { margin-left: 0; }
 
 /* ── Responsive ── */
 @media (max-width: 1100px) {
