@@ -2,6 +2,7 @@
 db.py — SQLite database layer for AI-JIN Platform
 Uses Python built-in sqlite3, no ORM required.
 """
+import os
 import sqlite3
 import json
 import time
@@ -9,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime
 
-DB_PATH = Path(__file__).parent / "aijin.db"
+DB_PATH = Path(os.getenv("AIJIN_DB_PATH", str(Path(__file__).parent / "aijin.db")))
 
 
 @contextmanager
@@ -260,6 +261,26 @@ def image_upsert(project_id, path, filename, split="train", width=0, height=0):
             "SELECT id FROM images WHERE project_id=? AND path=?",
             (project_id, path)).fetchone()
         return row["id"]
+
+
+def image_move_path(old_path, new_path, new_split):
+    """Update registered image rows after a dataset file is moved."""
+    with get_db() as con:
+        cursor = con.execute(
+            """
+            UPDATE images
+            SET path=?, filename=?, split=?, updated_at=?
+            WHERE path=?
+            """,
+            (
+                new_path,
+                Path(new_path).name,
+                new_split,
+                now_iso(),
+                old_path,
+            ),
+        )
+        return cursor.rowcount
 
 
 def image_set_labeled(image_id, labeled, ann_count=0):

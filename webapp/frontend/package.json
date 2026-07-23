@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
+    "test:annotator-ui": "node --test src/pages/annotationGeometry.test.js",
+    "test:split-ui": "node --test src/pages/datasetSplitUi.test.js",
+    "test:training-ui": "node --test src/pages/trainingReadiness.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

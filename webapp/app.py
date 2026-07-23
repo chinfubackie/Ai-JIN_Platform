@@ -17,6 +17,7 @@ import uuid
 from dataclasses import asdict
 from pathlib import Path
 import db as _db
+import dataset_split as _dataset_split
 
 try:
     from dotenv import load_dotenv
@@ -28,12 +29,13 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024  # 1GB upload limit (video files)
 
 # ── Config ────────────────────────────────────────────────────────────
+PLATFORM_ROOT = Path(__file__).resolve().parent.parent
 LS_URL = os.getenv("LABEL_STUDIO_URL", "http://localhost:8085")
 LS_TOKEN = os.getenv("LABEL_STUDIO_TOKEN", "")
 YOLO_URL = os.getenv("YOLO_TRAIN_URL", "http://localhost:8111")
-DATASET = Path(os.getenv("DATASET_PATH", r"D:\Ai-JIN_V10.0_patch_output\dataset"))
-RUNS = Path(os.getenv("RUNS_PATH", r"D:\Ai-JIN_V10.0_patch_output\runs"))
-MODEL_DIR = Path(os.getenv("MODEL_PATH", r"D:\Ai-JIN_Platform\models"))
+DATASET = Path(os.getenv("DATASET_PATH", str(PLATFORM_ROOT / "dataset")))
+RUNS = Path(os.getenv("RUNS_PATH", str(PLATFORM_ROOT / "runs")))
+MODEL_DIR = Path(os.getenv("MODEL_PATH", str(PLATFORM_ROOT / "models")))
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
 VIDEO_EXT = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 MAX_IMPORT_BATCH = 1500
@@ -70,6 +72,7 @@ _video_label_state = {
     "progress": 0,
     "log": "",
 }
+_dataset_split_lock = threading.Lock()
 
 
 def _video_label_snapshot():
@@ -92,6 +95,22 @@ def _safe_path(base, user_path):
     if not str(resolved).startswith(str(base.resolve())):
         abort(403, "Access denied")
     return resolved
+
+
+def _label_path_for_image(image_path):
+    """Return the YOLO label path mirroring an image's dataset path."""
+    image_path = Path(image_path).resolve()
+    dataset_root = DATASET.resolve()
+    relative = image_path.relative_to(dataset_root)
+    parts = list(relative.parts)
+
+    image_indexes = [i for i, part in enumerate(parts) if part.lower() == "images"]
+    if image_indexes:
+        parts[image_indexes[-1]] = "labels"
+        parts[-1] = Path(parts[-1]).with_suffix(".txt").name
+        return dataset_root.joinpath(*parts)
+
+    return image_path.parent / "labels" / f"{image_path.stem}.txt"
 
 
 def _load_class_name_map():
@@ -360,6 +379,61 @@ def _resolve_training_data_path(data_ref):
     return candidate
 
 
+def _training_label_readiness(data_yaml, yaml_data):
+    root_ref = str(yaml_data.get("path") or ".")
+    dataset_root = Path(root_ref)
+    windows_absolute = (
+        len(root_ref) >= 3
+        and root_ref[1] == ":"
+        and root_ref[2] in ("/", "\\")
+    )
+    if not dataset_root.is_absolute() and not windows_absolute:
+        dataset_root = data_yaml.parent / dataset_root
+    if (dataset_root.is_absolute() or windows_absolute) and not dataset_root.exists():
+        dataset_root = data_yaml.parent
+    dataset_root = dataset_root.resolve()
+
+    train_refs = yaml_data.get("train") or "images/train"
+    if isinstance(train_refs, (str, Path)):
+        train_refs = [train_refs]
+
+    total = 0
+    labeled = 0
+    for train_ref in train_refs:
+        image_dir = Path(str(train_ref))
+        if not image_dir.is_absolute():
+            image_dir = dataset_root / image_dir
+        image_dir = image_dir.resolve()
+        if not image_dir.is_dir():
+            continue
+
+        if image_dir.parent.name.lower() == "images":
+            label_dir = image_dir.parent.parent / "labels" / image_dir.name
+        else:
+            parts = list(image_dir.parts)
+            image_index = next(
+                (index for index in range(len(parts) - 1, -1, -1) if parts[index].lower() == "images"),
+                None,
+            )
+            if image_index is None:
+                continue
+            parts[image_index] = "labels"
+            label_dir = Path(*parts)
+
+        for image_path in image_dir.rglob("*"):
+            if not image_path.is_file() or image_path.suffix.lower() not in IMG_EXT:
+                continue
+            total += 1
+            label_path = label_dir / image_path.relative_to(image_dir).with_suffix(".txt")
+            try:
+                if label_path.is_file() and label_path.read_text(encoding="utf-8").strip():
+                    labeled += 1
+            except OSError:
+                continue
+
+    return {"total": total, "labeled": labeled}
+
+
 def _resolve_training_model(model_ref):
     model_ref = model_ref or "yolov8n.pt"
     candidate = Path(str(model_ref))
@@ -423,6 +497,17 @@ def _start_local_training(config):
                     "ตรวจสอบว่ามีภาพที่ label แล้วอยู่ใน images/train ของ dataset "
                     "(generate-yaml จะหาคลาสจากโฟลเดอร์ที่มีภาพใน images/train เท่านั้น)"
                 ),
+            }
+        readiness = _training_label_readiness(data_yaml, yaml_data)
+        if readiness["labeled"] == 0:
+            return {
+                "ok": False,
+                "runner": "local",
+                "error": (
+                    "ยังเริ่มเทรนไม่ได้: ไม่พบไฟล์ label ที่มีข้อมูลคู่กับภาพในชุด Train "
+                    f"(ภาพ {readiness['total']} / มี label {readiness['labeled']})"
+                ),
+                "readiness": readiness,
             }
     except (OSError, ValueError):
         pass  # let ultralytics surface its own error if the yaml can't be read/parsed here
@@ -756,7 +841,7 @@ def api_images():
     per_page = int(request.args.get("per_page", 50))
     target = DATASET / subdir
     if not target.exists():
-        return jsonify({"images": [], "total": 0})
+        return jsonify({"images": [], "total": 0, "page": page, "pages": 0})
     all_imgs = sorted(
         [f for f in target.iterdir() if f.suffix.lower() in IMG_EXT],
         key=lambda f: f.name)
@@ -782,8 +867,7 @@ def api_image(filepath):
 @app.route("/api/label/<path:filepath>")
 def api_label(filepath):
     img_path = _safe_path(DATASET, filepath)
-    label_dir = img_path.parent.parent / "labels"
-    label_file = label_dir / f"{img_path.stem}.txt"
+    label_file = _label_path_for_image(img_path)
     if not label_file.exists():
         return jsonify({"labels": [], "exists": False})
     lines = label_file.read_text().strip().split("\n")
@@ -805,12 +889,13 @@ def api_label_save():
     data = request.json or {}
     img_rel = data.get("image_path", "")
     labels = data.get("labels", [])
+    if not img_rel:
+        return jsonify({"ok": False, "error": "image_path is required"}), 400
     img_path = _safe_path(DATASET, img_rel)
     if not img_path.exists():
         return jsonify({"ok": False, "error": "Image not found"}), 404
-    label_dir = img_path.parent.parent / "labels"
-    label_dir.mkdir(parents=True, exist_ok=True)
-    label_file = label_dir / f"{img_path.stem}.txt"
+    label_file = _label_path_for_image(img_path)
+    label_file.parent.mkdir(parents=True, exist_ok=True)
     lines = []
     for lb in labels:
         lines.append(f"{lb['class_id']} {lb['cx']:.6f} {lb['cy']:.6f} {lb['w']:.6f} {lb['h']:.6f}")
@@ -833,7 +918,10 @@ def api_predict():
         body["imgsz"] = request.form.get("imgsz", "640")
         body["model"] = request.form.get("model", "/app-models/best.pt")
     else:
-        body = request.json or {}
+        body = request.get_json(silent=True) or {}
+
+    if not body.get("image"):
+        return jsonify({"error": "No image provided"}), 400
 
     body["command"] = "predict"
     result = yolo_post(body)
@@ -1249,6 +1337,32 @@ def api_train_start():
             "name": run_name,
         },
     }
+    try:
+        import yaml as _yaml
+
+        data_yaml = _resolve_training_data_path(body["config"]["data"])
+        yaml_data = _yaml.safe_load(data_yaml.read_text(encoding="utf-8")) or {}
+        if not yaml_data.get("names"):
+            return jsonify({
+                "ok": False,
+                "error": f"{data_yaml} ไม่มีคลาส (names ว่าง) จึงเริ่มเทรนไม่ได้",
+            }), 400
+        readiness = _training_label_readiness(data_yaml, yaml_data)
+        if readiness["labeled"] == 0:
+            return jsonify({
+                "ok": False,
+                "error": (
+                    "ยังเริ่มเทรนไม่ได้: ไม่พบไฟล์ label ที่มีข้อมูลคู่กับภาพในชุด Train "
+                    f"(ภาพ {readiness['total']} / มี label {readiness['labeled']})"
+                ),
+                "readiness": readiness,
+            }), 400
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "error": f"ตรวจสอบ training dataset ไม่สำเร็จ: {exc}",
+        }), 400
+
     health = yolo_get("/health")
     remote_status = health.get("status") if isinstance(health, dict) else "offline"
     if remote_status == "offline":
@@ -1380,7 +1494,9 @@ def api_deploy_model():
     import shutil
     data = request.json or {}
     src = data.get("source", "")
-    if not src or not Path(src).exists():
+    if not src:
+        return jsonify({"ok": False, "error": "source is required"}), 400
+    if not Path(src).exists():
         return jsonify({"ok": False, "error": "Model file not found"}), 404
     dst = MODEL_DIR / "best.pt"
     backup = MODEL_DIR / f"best_backup_{time.strftime('%Y%m%d_%H%M%S')}.pt"
@@ -1619,31 +1735,137 @@ def api_import_classes():
 
 @app.route("/api/import/split-info")
 def api_import_split_info():
-    """Get train/val split statistics"""
+    """Get train/validation/test split statistics."""
     info = {}
-    for split in ("train", "val"):
+    image_root = DATASET / "auto_improve" / "images"
+    label_root = DATASET / "auto_improve" / "labels"
+    for split in ("train", "val", "test"):
         d = DATASET / "auto_improve" / "images" / split
         classes = {}
-        total = 0
+        images = []
         if d.exists():
-            for sub in d.iterdir():
-                if sub.is_dir():
-                    count = sum(1 for f in sub.iterdir()
-                                if f.suffix.lower() in IMG_EXT)
-                    if count:
-                        classes[sub.name] = count
-                        total += count
-        info[split] = {"total": total, "classes": classes}
-    labels_dir = DATASET / "auto_improve" / "labels"
-    label_count = {"train": 0, "val": 0}
-    for split in ("train", "val"):
-        ld = labels_dir / split
-        if ld.exists():
-            for sub in ld.rglob("*.txt"):
-                label_count[split] += 1
-    info["train"]["labels"] = label_count["train"]
-    info["val"]["labels"] = label_count["val"]
+            images = [
+                path
+                for path in d.rglob("*")
+                if path.is_file() and path.suffix.lower() in IMG_EXT
+            ]
+            for image in images:
+                relative = image.relative_to(image_root / split)
+                identity = _dataset_split.parse_capture_identity(
+                    relative,
+                    image.name,
+                )
+                classes[identity.workpiece] = (
+                    classes.get(identity.workpiece, 0) + 1
+                )
+        label_dir = label_root / split
+        labels = (
+            list(label_dir.rglob("*.txt"))
+            if label_dir.exists()
+            else []
+        )
+        non_empty_labels = 0
+        for label in labels:
+            try:
+                if label.read_text(encoding="utf-8").strip():
+                    non_empty_labels += 1
+            except OSError:
+                continue
+        total = len(images)
+        info[split] = {
+            "total": total,
+            "classes": classes,
+            "labels": len(labels),
+            "non_empty_labels": non_empty_labels,
+            "label_coverage": (
+                round(len(labels) / total * 100, 1) if total else 0.0
+            ),
+        }
     return jsonify(info)
+
+
+def _dataset_split_db_update(old_path, new_path, split):
+    return _db.image_move_path(old_path, new_path, split)
+
+
+@app.route("/api/import/split/preview", methods=["POST"])
+def api_import_split_preview():
+    data = request.get_json(silent=True) or {}
+    try:
+        ratios = {
+            "train": float(data.get("train_ratio", 0.8)),
+            "val": float(data.get("val_ratio", 0.1)),
+            "test": float(data.get("test_ratio", 0.1)),
+        }
+        gap_seconds = int(data.get("session_gap_seconds", 30))
+        seed = int(data.get("seed", 42))
+        plan = _dataset_split.create_split_plan(
+            DATASET,
+            ratios,
+            gap_seconds,
+            seed,
+            IMG_EXT,
+        )
+        return jsonify(plan)
+    except (TypeError, ValueError, _dataset_split.SplitPlanError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/import/split/apply", methods=["POST"])
+def api_import_split_apply():
+    data = request.get_json(silent=True) or {}
+    plan_id = str(data.get("plan_id", "")).strip()
+    if not plan_id:
+        return jsonify({"ok": False, "error": "plan_id is required"}), 400
+    try:
+        with _dataset_split_lock:
+            result = _dataset_split.apply_split_plan(
+                DATASET,
+                plan_id,
+                on_path_changed=_dataset_split_db_update,
+            )
+        return jsonify(result)
+    except (
+        _dataset_split.StalePlanError,
+        _dataset_split.SplitConflictError,
+    ) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except _dataset_split.SplitApplyError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    except _dataset_split.SplitPlanError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/import/split/undo", methods=["POST"])
+def api_import_split_undo():
+    data = request.get_json(silent=True) or {}
+    manifest_id = str(data.get("manifest_id", "")).strip()
+    if not manifest_id:
+        return jsonify({
+            "ok": False,
+            "error": "manifest_id is required",
+        }), 400
+    try:
+        with _dataset_split_lock:
+            result = _dataset_split.undo_split_manifest(
+                DATASET,
+                manifest_id,
+                on_path_changed=_dataset_split_db_update,
+            )
+        return jsonify(result)
+    except _dataset_split.SplitConflictError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except _dataset_split.SplitApplyError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    except _dataset_split.SplitPlanError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route("/api/import/split/latest")
+def api_import_split_latest():
+    return jsonify({
+        "manifest": _dataset_split.latest_split_manifest(DATASET),
+    })
 
 
 @app.route("/api/dataset/folder-stats")
@@ -1734,23 +1956,33 @@ def api_import_move():
 @app.route("/api/import/generate-yaml", methods=["POST"])
 def api_generate_yaml():
     """Generate data.yaml for YOLO training"""
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     classes = data.get("classes", [])
     if not classes:
-        cls_d = DATASET / "auto_improve" / "images" / "train"
-        if cls_d.exists():
-            classes = sorted(
-                d.name for d in cls_d.iterdir()
-                if d.is_dir() and any(
-                    f.suffix.lower() in IMG_EXT for f in d.iterdir()))
+        image_root = DATASET / "auto_improve" / "images"
+        discovered = set()
+        for split in ("train", "val", "test"):
+            split_dir = image_root / split
+            if not split_dir.exists():
+                continue
+            for image_path in split_dir.rglob("*"):
+                if not image_path.is_file() or image_path.suffix.lower() not in IMG_EXT:
+                    continue
+                relative = image_path.relative_to(split_dir)
+                identity = _dataset_split.parse_capture_identity(relative, relative)
+                if identity.workpiece:
+                    discovered.add(identity.workpiece)
+        classes = sorted(discovered)
     yaml_content = (
-        f"path: {str(DATASET / 'auto_improve').replace(chr(92), '/')}\n"
+        "path: .\n"
         f"train: images/train\n"
-        f"val: images/val\n\n"
+        f"val: images/val\n"
+        f"test: images/test\n\n"
         f"nc: {len(classes)}\n"
         f"names: {classes}\n"
     )
     yaml_path = DATASET / "auto_improve" / "data.yaml"
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
     yaml_path.write_text(yaml_content, encoding="utf-8")
     cm_path = DATASET / "auto_improve" / "class_mapping.json"
     cm = {"model_to_class_id": {name: i for i, name in enumerate(classes)}}
@@ -1999,8 +2231,7 @@ def api_sam_predict():
 def api_label_ext(filepath):
     """Load labels in extended format: boxes and polygons."""
     img_path  = _safe_path(DATASET, filepath)
-    label_dir = img_path.parent.parent / "labels"
-    label_file = label_dir / f"{img_path.stem}.txt"
+    label_file = _label_path_for_image(img_path)
     if not label_file.exists():
         return jsonify({"boxes": [], "polygons": [], "exists": False})
 
@@ -2034,9 +2265,8 @@ def api_label_ext_save():
     if not img_path.exists():
         return jsonify({"ok": False, "error": "Image not found"}), 404
 
-    label_dir = img_path.parent.parent / "labels"
-    label_dir.mkdir(parents=True, exist_ok=True)
-    label_file = label_dir / f"{img_path.stem}.txt"
+    label_file = _label_path_for_image(img_path)
+    label_file.parent.mkdir(parents=True, exist_ok=True)
 
     lines = []
     for b in boxes:

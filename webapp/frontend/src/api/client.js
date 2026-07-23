@@ -2,7 +2,10 @@ const BASE = '/api'
 
 export async function fetchJSON(path, opts) {
   const res = await fetch(`${BASE}${path}`, opts)
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new Error(data?.error || `${res.status} ${res.statusText}`)
+  }
   return res.json()
 }
 
@@ -58,6 +61,25 @@ export const api = {
   },
   importClasses: () => fetchJSON('/import/classes'),
   importSplitInfo: () => fetchJSON('/import/split-info'),
+  importSplitLatest: () => fetchJSON('/import/split/latest'),
+  importSplitPreview: (data) =>
+    fetchJSON('/import/split/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  importSplitApply: (planId) =>
+    fetchJSON('/import/split/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: planId }),
+    }),
+  importSplitUndo: (manifestId) =>
+    fetchJSON('/import/split/undo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manifest_id: manifestId }),
+    }),
   datasetFolderStats: (folder) =>
     fetchJSON(`/dataset/folder-stats?folder=${encodeURIComponent(folder)}`),
   importDelete: (files) =>

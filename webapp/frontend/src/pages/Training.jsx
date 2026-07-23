@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 import { Play, Square, Download, Brain, Clock, Activity, BarChart3, Target, Layers, ChevronDown, FolderOpen } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { canStartTraining, isTrainImageFolder } from './trainingReadiness'
 import './Training.css'
 
 const BASE_MODELS = [
@@ -118,7 +119,11 @@ export default function Training() {
     })
     api.folders().then(data => {
       const list = (data?.folders || data || [])
-      setDatasetFolders(list.map(f => typeof f === 'string' ? { path: f, count: 0 } : f))
+      const trainFolders = list
+        .map(f => typeof f === 'string' ? { path: f, count: 0 } : f)
+        .filter(f => isTrainImageFolder(f.path))
+      setDatasetFolders(trainFolders)
+      setSelectedFolder(current => current || trainFolders[0]?.path || '')
     }).catch(() => {})
   }, [])
 
@@ -197,7 +202,7 @@ export default function Training() {
     setStarting(true)
     setLossHistory([])
     try {
-      const payload = { ...config }
+      const payload = { ...config, data: '/dataset/auto_improve/data.yaml' }
       if (projectId) payload.project_id = parseInt(projectId)
       await api.trainStart(payload)
       const s = await api.trainStatus()
@@ -228,6 +233,7 @@ export default function Training() {
   const isCompleted = ['completed', 'done'].includes(statusState)
   const isError = statusState === 'error'
   const isOffline = statusState === 'offline'
+  const trainingReady = canStartTraining(selectedFolder, folderStats)
   const progress = status?.progress ?? 0
   const runnerLabel = status?.runner ? ` (${status.runner})` : ''
 
@@ -399,13 +405,13 @@ export default function Training() {
           <div className="card-title"><Brain size={16} /> ตั้งค่าการเทรน</div>
           <div className="config-form">
             <div className="form-group">
-              <label><FolderOpen size={13} style={{ verticalAlign: -2 }} /> โฟลเดอร์ dataset ที่จะเทรน</label>
+              <label><FolderOpen size={13} style={{ verticalAlign: -2 }} /> โฟลเดอร์ Train สำหรับตรวจความพร้อม</label>
               <select
                 value={selectedFolder}
                 onChange={e => setSelectedFolder(e.target.value)}
                 disabled={isTraining}
               >
-                <option value="">-- เลือกโฟลเดอร์เพื่อดูสถิติ --</option>
+                <option value="">-- ไม่พบโฟลเดอร์ images/train --</option>
                 {datasetFolders.map(f => (
                   <option key={f.path} value={f.path}>{f.path} ({f.count} ภาพ)</option>
                 ))}
@@ -430,6 +436,11 @@ export default function Training() {
                       <span><span className="folder-stats-env-dot" />ภาพสิ่งแวดล้อม (ไม่มี label)</span>
                       <strong>{folderStats.environment}</strong>
                     </div>
+                    {!trainingReady && (
+                      <div className="training-readiness-warning" role="alert">
+                        ยังเริ่มเทรนไม่ได้: ต้องทำ Label ในชุด Train อย่างน้อย 1 ภาพ
+                      </div>
+                    )}
                   </>
                 ) : (
                   <span className="folder-stats-loading">โหลดสถิติไม่สำเร็จ</span>
@@ -516,7 +527,8 @@ export default function Training() {
             <button
               className={`btn ${isTraining ? 'btn-danger' : 'btn-primary'}`}
               onClick={handleStart}
-              disabled={isTraining || starting}
+              disabled={isTraining || starting || !trainingReady}
+              title={!trainingReady ? 'ต้องมี Label ในชุด Train อย่างน้อย 1 ภาพ' : undefined}
               style={{ width: '100%', justifyContent: 'center' }}
             >
               {starting ? (

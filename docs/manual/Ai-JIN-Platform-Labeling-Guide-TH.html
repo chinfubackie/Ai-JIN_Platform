@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>คู่มือ Ai-JIN Platform - Label / Annotate</title>
+  <link rel="stylesheet" href="manual.css">
+</head>
+<body>
+  <section class="sheet cover">
+    <div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div>
+    <div class="cover-main">
+      <div class="eyebrow">Operator and QA Guide</div>
+      <h1>คู่มือการ Label<br>และ Annotate</h1>
+      <div class="rule"></div>
+      <p class="lead">วาด ปรับขนาด ตรวจคุณภาพ และใช้ SAM ร่วมกับกรอบ เพื่อสร้างข้อมูล YOLO ที่พร้อมสำหรับการเทรน</p>
+      <div class="meta">
+        <div><small>หน้าจอ</small><strong>/annotator</strong></div>
+        <div><small>ฉบับ</small><strong>1.0 / 22 กรกฎาคม 2026</strong></div>
+        <div><small>ผู้ใช้งาน</small><strong>Operator / QA / AI Engineer</strong></div>
+        <div><small>สถานะข้อมูล</small><strong>Train 0 / 1,015 labels</strong></div>
+      </div>
+    </div>
+    <div class="foot"><span>Aichi Forging Technology</span><span>เอกสารควบคุมภายใน</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>ส่วนประกอบหน้าจอ</span></div>
+    <h2>1. รู้จักหน้า Annotator</h2>
+    <img class="shot shot-medium" src="images/label-01-overview.png" alt="Annotator overview">
+    <div class="grid2">
+      <div class="panel accent"><h3>พื้นที่ทำงาน</h3><ul><li>Toolbar: Select, Box, Polygon, SAM, Undo/Redo</li><li>Classes: ชื่อคลาสและ SAM model</li><li>Canvas: ภาพจริงและ annotation</li></ul></div>
+      <div class="panel green"><h3>การควบคุม</h3><ul><li>Annotations: เลือกหรือลบกรอบ</li><li>Navigation: Train/Val/Test และลำดับภาพ</li><li>Save, Save &amp; Next, Auto-label, Ask LM</li></ul></div>
+    </div>
+    <div class="callout">สถานะปัจจุบัน Train มี label 0/1,015 ภาพ จึงยังไม่ควรเริ่มเทรน</div>
+    <div class="foot"><span>Labeling Guide v1.0</span><span>2 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Box Editing</span></div>
+    <h2>2. วาด ย้าย และปรับขนาดกรอบ</h2>
+    <div class="steps">
+      <div class="step"><b>1 เลือกคลาส</b><span>สร้างชื่อให้ตรง workpiece</span></div>
+      <div class="step"><b>2 วาด Box</b><span>ลากให้ครอบชิ้นงาน</span></div>
+      <div class="step"><b>3 Select</b><span>คลิกในกรอบเพื่อเลือก</span></div>
+      <div class="step"><b>4 ปรับกรอบ</b><span>ลากในกรอบหรือจุดจับมุม</span></div>
+    </div>
+    <img class="shot shot-medium" src="images/label-02-selected-box.png" alt="Selected and resized box">
+    <div class="grid2">
+      <div class="panel accent"><h3>ย้ายทั้งกรอบ</h3><p>เลือก <b>Select (V)</b> แล้วลากภายในกรอบ ขนาดเดิมจะคงอยู่และตำแหน่งถูกจำกัดในภาพ</p></div>
+      <div class="panel green"><h3>ปรับขนาด</h3><p>ลากจุดจับสีขาว NW/NE/SW/SE ให้กรอบชิดขอบชิ้นงาน กรอบจะไม่ออกนอกภาพ</p></div>
+    </div>
+    <p><span class="key">Ctrl+Z</span> ย้อนหนึ่งครั้ง &nbsp; <span class="key">Ctrl+Y</span> ทำซ้ำ &nbsp; <span class="key">Delete</span> ลบกรอบที่เลือก</p>
+    <div class="foot"><span>Labeling Guide v1.0</span><span>3 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Polygon และ SAM</span></div>
+    <h2>3. ใช้ Polygon และ SAM ร่วมกับกรอบ</h2>
+    <img class="shot shot-medium" src="images/label-03-sam-mode.png" alt="SAM mode">
+    <div class="grid2">
+      <div class="panel accent"><h3>Polygon</h3><ol><li>กด Polygon (P)</li><li>คลิกตามแนวขอบอย่างน้อย 3 จุด</li><li>ปิดรูปและตรวจ class</li><li>ลบแล้ววาดใหม่หากแนวขอบผิด</li></ol></div>
+      <div class="panel green"><h3>SAM2 / SAM v1</h3><ol><li>เลือก SAM model</li><li>กด SAM Auto (S)</li><li>คลิกกลางชิ้นงานหรือใช้ rough box</li><li>ตรวจ Preview แล้วกดใช้งาน</li></ol></div>
+    </div>
+    <div class="callout ok">SAM ช่วยหาแนวขอบ แต่ Operator ต้องยืนยัน class, วัตถุที่ขาด และผลลัพธ์สุดท้ายก่อน Save</div>
+    <div class="foot"><span>Labeling Guide v1.0</span><span>4 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Auto-label และ Save</span></div>
+    <h2>4. Auto-label, Ask LM และการบันทึก</h2>
+    <table>
+      <thead><tr><th>คำสั่ง</th><th>การใช้งาน</th><th>สิ่งที่ต้องตรวจ</th></tr></thead>
+      <tbody>
+        <tr><td>Auto-label</td><td>ใช้โมเดลกับภาพปัจจุบัน</td><td>กรอบซ้ำ, class, false positive/negative</td></tr>
+        <tr><td>Auto-label ทั้งโฟลเดอร์</td><td>ประมวลผลหลายภาพ</td><td>สุ่มตรวจทุก workpiece และสภาพแสง</td></tr>
+        <tr><td>เล่นอัตโนมัติ</td><td>detect, รอ, บันทึก, ไปภาพถัดไป</td><td>ตั้งเวลารอให้ตรวจทัน</td></tr>
+        <tr><td>Ask LM</td><td>เสนอวัตถุที่ขาดหรือปรับกรอบ</td><td>LM Status และผลก่อนยืนยัน</td></tr>
+      </tbody>
+    </table>
+    <div class="grid2">
+      <div class="panel accent"><h3>บันทึก</h3><p>เขียน label ของภาพปัจจุบัน แล้วคงอยู่หน้าเดิมเพื่อ QA ซ้ำ</p></div>
+      <div class="panel green"><h3>บันทึก &amp; ถัดไป</h3><p>เขียน label แล้วเปิดภาพถัดไป เหมาะกับ workflow ต่อเนื่อง</p></div>
+    </div>
+    <h3>รูปแบบที่จัดเก็บ</h3>
+    <p><code>labels/&lt;split&gt;/ชื่อเดียวกับภาพ.txt</code></p>
+    <p>Box: <code>class cx cy width height</code> &nbsp; Polygon: <code>class x1 y1 x2 y2 ...</code></p>
+    <div class="callout">อย่าเปลี่ยนภาพจนกว่าจะยืนยันว่า Save สำเร็จและตัวนับ labeled เปลี่ยน</div>
+    <div class="foot"><span>Labeling Guide v1.0</span><span>5 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Quality Control</span></div>
+    <h2>5. Checklist คุณภาพต่อภาพ</h2>
+    <div class="grid2">
+      <div class="panel green"><h3>ต้องผ่าน</h3><ul class="check"><li>ครบทุกชิ้นงาน</li><li>class ถูกต้อง</li><li>กรอบชิดวัตถุ</li><li>ไม่มีกรอบออกนอกภาพ</li><li>ไม่มี duplicate annotation</li><li>Save แล้วเปิดใหม่ยังเห็นผล</li></ul></div>
+      <div class="panel red"><h3>ต้องแก้</h3><ul><li>กรอบกินพื้นหลังมาก</li><li>ตัดส่วนสำคัญของชิ้นงาน</li><li>label เงาหรือแสงสะท้อน</li><li>ชื่อคลาสไม่ตรง data.yaml</li><li>ทำงานใน split_quarantine</li></ul></div>
+    </div>
+    <h2>6. ปัญหาที่พบบ่อย</h2>
+    <table>
+      <thead><tr><th>อาการ</th><th>แนวทางแก้</th></tr></thead>
+      <tbody>
+        <tr><td>Save 500</td><td>ตรวจ log, path และ permission ใต้ D:\Ai-JIN_Platform\dataset</td></tr>
+        <tr><td>Classes (0) แต่มี class_0</td><td>สร้างชื่อคลาสจริงแล้วกำหนด annotation ใหม่</td></tr>
+        <tr><td>SAM ไม่พบวัตถุ</td><td>เปลี่ยนจุด prompt/model หรือวาด Box เอง</td></tr>
+        <tr><td>ปรับกรอบผิด</td><td>กด Ctrl+Z ก่อนเปลี่ยนภาพ</td></tr>
+      </tbody>
+    </table>
+    <div class="foot"><span>Labeling Guide v1.0</span><span>6 / 7</span></div>
+  </section>
+
+  <section class="sheet">
+    <div class="head"><div class="brand"><span class="mark">AI</span> AI-JIN PLATFORM</div><span>Responsive UI และส่งต่อ Train</span></div>
+    <h2>7. เก็บ Sidebar และใช้จอขนาดต่าง ๆ</h2>
+    <img class="shot shot-medium" src="images/ui-responsive-sidebar-collapsed.png" alt="Collapsed sidebar">
+    <div class="grid2">
+      <div class="panel accent"><h3>ปุ่มสไลด์</h3><p>กดลูกศรกลางขอบซ้ายเพื่อย่อ sidebar จาก 260 px เหลือ 68 px ระบบจำสถานะหลัง Reload</p></div>
+      <div class="panel green"><h3>Responsive</h3><p>Toolbar wrap อัตโนมัติ จอ 320-700 px เรียง Classes, Canvas และ Annotations ในแนวตั้งและเลื่อนได้</p></div>
+    </div>
+    <h3>เกณฑ์ส่งต่อให้ Train</h3>
+    <ul class="check"><li>Train และ Val มี coverage ตามเกณฑ์ QA</li><li>Class names และลำดับตรงกันทุก split</li><li>ไม่มี duplicate leakage</li><li>data.yaml ผ่านการตรวจ</li><li>ทีม QA บันทึกผู้อนุมัติ</li></ul>
+    <div class="callout">สถานะปัจจุบันยังไม่ผ่าน: Train มี label 0/1,015 ภาพ</div>
+    <div class="foot"><span>Labeling Guide v1.0</span><span>7 / 7</span></div>
+  </section>
+</body>
+</html>

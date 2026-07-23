@@ -38,6 +38,7 @@ services:
       LABEL_STUDIO_HOST: http://localhost:8085
       LABEL_STUDIO_USERNAME: admin@aijin.local
       LABEL_STUDIO_PASSWORD: Admin1234!
+      DATA_UPLOAD_MAX_NUMBER_FILES: 2000
     volumes:
       - label_studio_data:/label-studio/data
       - ${DATASET_PATH:-./dataset}:/label-studio/files:ro
@@ -64,10 +65,12 @@ services:
       DATASET_PATH: /dataset
       RUNS_PATH: /runs
       MODEL_PATH: /models
+      AIJIN_DB_PATH: /data/aijin.db
     volumes:
       - ${DATASET_PATH:-./dataset}:/dataset
       - ${RUNS_PATH:-./runs}:/runs
       - ${MODEL_PATH:-./models}:/models
+      - aijin_db_data:/data
     ports:
       - "8501:8501"
     extra_hosts:
@@ -76,14 +79,8 @@ services:
     # tensors via /dev/shm; Docker's 64MB default is too small and crashes
     # training with "unable to allocate shared memory... No space left on device".
     shm_size: '2gb'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
 volumes:
   postgres_data:
   label_studio_data:
+  aijin_db_data:

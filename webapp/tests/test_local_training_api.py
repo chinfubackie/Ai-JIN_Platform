@@ -65,7 +65,25 @@ def make_training_files(tmp_path):
     model_dir.mkdir()
     model_path = model_dir / "best.pt"
     model_path.write_bytes(b"model")
+    train_images = dataset / "images" / "train"
+    train_labels = dataset / "labels" / "train"
+    train_images.mkdir(parents=True)
+    train_labels.mkdir(parents=True)
+    (train_images / "labeled.jpg").write_bytes(b"image")
+    (train_labels / "labeled.txt").write_text("0 0.5 0.5 0.2 0.2\n", encoding="utf-8")
     return model_path
+
+
+def test_training_readiness_falls_back_from_missing_absolute_yaml_root(monkeypatch, tmp_path):
+    app_mod = load_app(monkeypatch, tmp_path)
+    make_training_files(tmp_path)
+    data_yaml = tmp_path / "dataset" / "auto_improve" / "data.yaml"
+    readiness = app_mod._training_label_readiness(
+        data_yaml,
+        {"path": "Z:/not-mounted/auto_improve", "train": "images/train"},
+    )
+
+    assert readiness == {"total": 1, "labeled": 1}
 
 
 def test_train_status_uses_local_state_when_remote_server_is_offline(monkeypatch, tmp_path):
@@ -110,3 +128,56 @@ def test_train_start_runs_local_fallback_when_remote_server_is_offline(monkeypat
     assert Path(status["best_pt"]).exists()
     assert fake_yolo.calls[0]["model"] == str(model_path)
     assert fake_yolo.calls[0]["data"].endswith("auto_improve\\data.yaml") or fake_yolo.calls[0]["data"].endswith("auto_improve/data.yaml")
+
+
+def test_train_start_blocks_dataset_without_labeled_train_images(monkeypatch, tmp_path):
+    app_mod = load_app(monkeypatch, tmp_path)
+    fake_yolo = install_fake_yolo(monkeypatch)
+    model_path = make_training_files(tmp_path)
+    train_dir = tmp_path / "dataset" / "auto_improve" / "images" / "train"
+    train_dir.mkdir(parents=True, exist_ok=True)
+    (train_dir / "unlabeled.jpg").write_bytes(b"image")
+    (tmp_path / "dataset" / "auto_improve" / "labels" / "train" / "labeled.txt").unlink()
+    monkeypatch.setattr(app_mod, "yolo_get", lambda path="/": {"status": "offline"})
+    monkeypatch.setattr(app_mod.threading, "Thread", ImmediateThread)
+
+    response = app_mod.app.test_client().post(
+        "/api/train/start",
+        json={
+            "model": str(model_path),
+            "data": "/dataset/auto_improve/data.yaml",
+            "epochs": 1,
+            "name": "must_not_start",
+        },
+    )
+
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data["ok"] is False
+    assert "label" in data["error"].lower()
+    assert fake_yolo.calls == []
+
+
+def test_train_start_blocks_unlabeled_dataset_before_remote_runner(monkeypatch, tmp_path):
+    app_mod = load_app(monkeypatch, tmp_path)
+    model_path = make_training_files(tmp_path)
+    (tmp_path / "dataset" / "auto_improve" / "labels" / "train" / "labeled.txt").unlink()
+    remote_calls = []
+    monkeypatch.setattr(app_mod, "yolo_get", lambda path="/": {"status": "ok"})
+    monkeypatch.setattr(app_mod, "yolo_post", lambda payload: remote_calls.append(payload) or {"ok": True})
+
+    response = app_mod.app.test_client().post(
+        "/api/train/start",
+        json={
+            "model": str(model_path),
+            "data": "/dataset/auto_improve/data.yaml",
+            "epochs": 1,
+            "name": "remote_must_not_start",
+        },
+    )
+
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data["ok"] is False
+    assert data["readiness"] == {"total": 1, "labeled": 0}
+    assert remote_calls == []

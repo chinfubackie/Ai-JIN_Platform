@@ -1,0 +1,11 @@
+# Override สำหรับเครื่อง server ที่มี NVIDIA GPU + nvidia-container-toolkit
+# ใช้งาน: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+services:
+  webapp:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
