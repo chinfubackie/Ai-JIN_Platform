@@ -44,6 +44,7 @@ class CameraConfig:
     iou_threshold: float = 0.45
     model_path: str = ""  # empty = use current deployed model
     imgsz: int = 640
+    device: str = "cpu"  # "cpu", "cuda:0", "cuda:1", ...
     enable_counting: bool = True
     enable_tracking: bool = True
     inference_every_n: int = 3  # run YOLO every N frames
@@ -166,6 +167,7 @@ class CameraThread(_SSEBroadcastMixin, threading.Thread):
         self._tracker = None
         self._counting_engine = None
         self._frame_counter = 0
+        self._cam_key = config.source
 
     def run(self):
         import cv2
@@ -199,9 +201,21 @@ class CameraThread(_SSEBroadcastMixin, threading.Thread):
 
         from app import _resolve_training_model
 
-        # Create counting engine
-        from counting import CountingEngine
+        # Create counting engine and restore zones/lines from DB
+        from counting import CountingEngine, Zone, CountingLine
+        import db as _db
         self._counting_engine = CountingEngine(self.camera_id)
+        cam_key = self.config.source
+        try:
+            for z in _db.load_cam_zones(cam_key):
+                self._counting_engine.add_zone(Zone(id=z["id"], name=z.get("name", ""),
+                                                     label=z.get("label", ""), points=z["points"]))
+            for l in _db.load_cam_lines(cam_key):
+                self._counting_engine.add_line(CountingLine(id=l["id"], name=l.get("name", ""),
+                                                             x1=l["x1"], y1=l["y1"], x2=l["x2"], y2=l["y2"],
+                                                             direction=l.get("direction", "both")))
+        except Exception:
+            pass
 
         while not self._stop_event.is_set():
             ret, frame = self._cap.read()
@@ -285,7 +299,7 @@ class CameraThread(_SSEBroadcastMixin, threading.Thread):
 
             conf = self.config.conf_threshold
             iou = self.config.iou_threshold
-            results = predict(frame, model_ref, conf=conf, iou=iou, imgsz=self.config.imgsz)
+            results = predict(frame, model_ref, conf=conf, iou=iou, imgsz=self.config.imgsz, device=self.config.device)
 
             detections = []
             for result in results:
@@ -307,9 +321,11 @@ class CameraThread(_SSEBroadcastMixin, threading.Thread):
             self.state.detections = len(detections)
             self.state.error = ""
 
+            broadcast_data = {"detections": detections}
             if self.config.enable_counting and self._counting_engine and detections:
                 counting_result = self._counting_engine.update(detections)
-                self._broadcast_result(counting_result)
+                broadcast_data.update(counting_result)
+            self._broadcast_result(broadcast_data)
         except Exception as e:
             self.state.error = f"Inference error: {e}"
 
@@ -348,7 +364,21 @@ class CameraThread(_SSEBroadcastMixin, threading.Thread):
 
     def get_status(self) -> dict:
         """ได้สถานะกล้องปัจจุบัน"""
-        return asdict(self.state)
+        return {
+            **asdict(self.state),
+            "conf_threshold": self.config.conf_threshold,
+            "iou_threshold": self.config.iou_threshold,
+            "imgsz": self.config.imgsz,
+            "device": self.config.device,
+            "fps_target": self.config.fps_target,
+            "model_path": self.config.model_path,
+        }
+
+    def update_config(self, **kwargs):
+        """อัปเดตค่า inference config ขณะรันอยู่ (thread-safe สำหรับ GIL)"""
+        for k, v in kwargs.items():
+            if hasattr(self.config, k):
+                setattr(self.config, k, v)
 
     def get_counting_engine(self):
         return self._counting_engine
@@ -366,13 +396,14 @@ class BrowserCameraSession(_SSEBroadcastMixin):
 
     def __init__(self, name: str, camera_id: Optional[int] = None,
                  conf_threshold: float = 0.25, iou_threshold: float = 0.45,
-                 model_path: str = "", imgsz: int = 640,
+                 model_path: str = "", imgsz: int = 640, device: str = "cpu",
                  enable_counting: bool = True):
         self.camera_id = camera_id if camera_id is not None else _new_camera_id()
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.model_path = model_path
         self.imgsz = imgsz
+        self.device = device
         self.enable_counting = enable_counting
 
         self.state = CameraState(
@@ -391,8 +422,21 @@ class BrowserCameraSession(_SSEBroadcastMixin):
         self._fps_window_start = time.time()
         self._fps_window_count = 0
 
-        from counting import CountingEngine
+        from counting import CountingEngine, Zone, CountingLine
+        import db as _db
         self._counting_engine = CountingEngine(self.camera_id)
+        cam_key = f"browser:{name or self.camera_id}"
+        self._cam_key = cam_key
+        try:
+            for z in _db.load_cam_zones(cam_key):
+                self._counting_engine.add_zone(Zone(id=z["id"], name=z.get("name", ""),
+                                                     label=z.get("label", ""), points=z["points"]))
+            for l in _db.load_cam_lines(cam_key):
+                self._counting_engine.add_line(CountingLine(id=l["id"], name=l.get("name", ""),
+                                                             x1=l["x1"], y1=l["y1"], x2=l["x2"], y2=l["y2"],
+                                                             direction=l.get("direction", "both")))
+        except Exception:
+            pass
 
     def process_frame(self, jpeg_bytes: bytes, resolve_model) -> dict:
         """ถอดรหัสเฟรม JPEG จากเบราว์เซอร์ -> inference -> counting -> broadcast"""
@@ -430,7 +474,7 @@ class BrowserCameraSession(_SSEBroadcastMixin):
             from inference_engine import predict
             results = predict(
                 frame, model_ref, conf=self.conf_threshold,
-                iou=self.iou_threshold, imgsz=self.imgsz,
+                iou=self.iou_threshold, imgsz=self.imgsz, device=self.device,
             )
             detections = []
             for result in results:
@@ -452,10 +496,12 @@ class BrowserCameraSession(_SSEBroadcastMixin):
             self.state.detections = len(detections)
             self.state.error = ""
 
+            broadcast_data = {"detections": detections}
             counting_result = None
             if self.enable_counting and detections:
                 counting_result = self._counting_engine.update(detections)
-                self._broadcast_result(counting_result)
+                broadcast_data.update(counting_result)
+            self._broadcast_result(broadcast_data)
 
             return {"detections": detections, "counting": counting_result}
         except Exception as e:
@@ -485,7 +531,20 @@ class BrowserCameraSession(_SSEBroadcastMixin):
         self.state.status = "stopped"
 
     def get_status(self) -> dict:
-        return asdict(self.state)
+        return {
+            **asdict(self.state),
+            "conf_threshold": self.conf_threshold,
+            "iou_threshold": self.iou_threshold,
+            "imgsz": self.imgsz,
+            "device": self.device,
+            "fps_target": 10,
+            "model_path": self.model_path,
+        }
+
+    def update_config(self, **kwargs):
+        for k in ("conf_threshold", "iou_threshold", "imgsz", "device", "model_path"):
+            if k in kwargs:
+                setattr(self, k, kwargs[k])
 
     def get_counting_engine(self):
         return self._counting_engine

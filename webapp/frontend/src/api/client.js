@@ -131,6 +131,15 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // ── System ──
+  systemDevices: () => fetchJSON('/system/devices'),
+  exportModelLocal: (data) =>
+    fetchJSON('/models/export/local', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
   // ── Camera & Counting ──
   cameras: () => fetchJSON('/cameras'),
   cameraAdd: (data) =>
@@ -157,6 +166,12 @@ export const api = {
     form.append('frame', blob, 'frame.jpg')
     return fetchJSON(`/cameras/browser/${id}/frame`, { method: 'POST', body: form })
   },
+  cameraUpdateConfig: (id, data) =>
+    fetchJSON(`/cameras/${id}/config`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
   countingStats: (camId) => fetchJSON(`/counting/${camId}`),
   countingReset: (camId) =>
     fetchJSON(`/counting/${camId}/reset`, { method: 'POST' }),

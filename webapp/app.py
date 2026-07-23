@@ -2510,6 +2510,8 @@ def api_camera_add():
         fps_target=int(data.get("fps_target", 15)),
         conf_threshold=float(data.get("conf_threshold", 0.25)),
         iou_threshold=float(data.get("iou_threshold", 0.45)),
+        model_path=data.get("model_path", ""),
+        device=data.get("device", "cpu"),
     )
     cm = _get_camera_manager()
     cam_id = cm.add_camera(config)
@@ -2531,6 +2533,7 @@ def api_camera_add_browser():
         iou_threshold=float(data.get("iou_threshold", 0.45)),
         model_path=data.get("model_path", ""),
         imgsz=int(data.get("imgsz", 640)),
+        device=data.get("device", "cpu"),
         enable_counting=bool(data.get("enable_counting", True)),
     )
     return jsonify({"ok": True, "id": cam_id})
@@ -2626,6 +2629,63 @@ def api_camera_stream(camera_id):
     return camera_sse_stream(cam)
 
 
+@app.route("/api/system/devices")
+def api_system_devices():
+    """รายชื่อ device ที่ใช้ inference ได้ (cpu + GPU ทุกตัว) พร้อมแนะนำ export format"""
+    devices = [{"id": "cpu", "name": "CPU", "type": "cpu"}]
+    recommended_formats = [
+        {"value": "onnx", "label": "ONNX (ทั่วไป)", "recommended": True},
+        {"value": "openvino", "label": "OpenVINO (Intel CPU)"},
+    ]
+    try:
+        import torch
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                name = torch.cuda.get_device_name(i)
+                devices.append({"id": f"cuda:{i}", "name": f"GPU {i}: {name}", "type": "cuda"})
+            # TensorRT is the best export for NVIDIA GPU
+            recommended_formats.insert(0, {"value": "engine", "label": "TensorRT Engine (NVIDIA GPU — เร็วที่สุด)", "recommended": True})
+    except Exception:
+        pass
+    # Common formats for all platforms
+    for fmt in [
+        {"value": "torchscript", "label": "TorchScript"},
+        {"value": "tflite", "label": "TFLite (Edge/Mobile)"},
+        {"value": "ncnn", "label": "NCNN (ARM/Mobile)"},
+    ]:
+        recommended_formats.append(fmt)
+    return jsonify({"devices": devices, "export_formats": recommended_formats})
+
+
+@app.route("/api/models/export/local", methods=["POST"])
+def api_models_export_local():
+    """Export โมเดล .pt เป็น format ที่เหมาะสมกับ device โดยใช้ ultralytics YOLO.export()"""
+    data = request.json or {}
+    model_path = data.get("model_path", "")
+    fmt = data.get("format", "onnx")
+    device = data.get("device", "cpu")
+    imgsz = int(data.get("imgsz", 640))
+    half = bool(data.get("half", False))
+
+    if not model_path:
+        active = MODEL_DIR / "best.pt"
+        if not active.exists():
+            return jsonify({"ok": False, "error": "ไม่พบ model_path และไม่มี best.pt"}), 400
+        model_path = str(active)
+
+    resolved = _resolve_training_model(model_path)
+    if not Path(resolved).exists():
+        return jsonify({"ok": False, "error": f"ไม่พบไฟล์: {resolved}"}), 404
+
+    try:
+        from ultralytics import YOLO
+        model = YOLO(resolved)
+        out_path = model.export(format=fmt, imgsz=imgsz, device=device, half=half)
+        return jsonify({"ok": True, "output": str(out_path), "format": fmt})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/counting/<int:cam_id>")
 def api_counting_stats(cam_id):
     if not _camera_available():
@@ -2669,19 +2729,26 @@ def _get_counting_engine_or_none(cam_id):
 def api_counting_config(cam_id):
     if not _camera_available():
         return jsonify({"error": "opencv-python not installed"}), 501
-    engine, err, code = _get_counting_engine_or_none(cam_id)
-    if engine is None:
-        return err, code
-    return jsonify({"zones": engine.list_zones(), "lines": engine.list_lines()})
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if cam is None:
+        return jsonify({"error": "camera not found"}), 404
+    engine = cam.get_counting_engine()
+    if engine is not None:
+        return jsonify({"zones": engine.list_zones(), "lines": engine.list_lines()})
+    # engine not running — load from DB by cam_key
+    cam_key = getattr(cam, "_cam_key", cam.state.source)
+    return jsonify({"zones": _db.load_cam_zones(cam_key), "lines": _db.load_cam_lines(cam_key)})
 
 
 @app.route("/api/counting/<int:cam_id>/zones", methods=["POST"])
 def api_counting_add_zone(cam_id):
     if not _camera_available():
         return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
-    engine, err, code = _get_counting_engine_or_none(cam_id)
-    if engine is None:
-        return err, code
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if cam is None:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
     data = request.json or {}
     points = data.get("points") or []
     if len(points) < 3:
@@ -2693,7 +2760,11 @@ def api_counting_add_zone(cam_id):
         points=points,
         label=data.get("label", ""),
     )
-    engine.add_zone(zone)
+    cam_key = getattr(cam, "_cam_key", cam.state.source)
+    _db.save_cam_zone(cam_key, asdict(zone))
+    engine = cam.get_counting_engine()
+    if engine:
+        engine.add_zone(zone)
     return jsonify({"ok": True, "zone": asdict(zone)})
 
 
@@ -2701,10 +2772,14 @@ def api_counting_add_zone(cam_id):
 def api_counting_remove_zone(cam_id, zone_id):
     if not _camera_available():
         return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
-    engine, err, code = _get_counting_engine_or_none(cam_id)
-    if engine is None:
-        return err, code
-    engine.remove_zone(zone_id)
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if cam is None:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
+    _db.delete_cam_zone(zone_id)
+    engine = cam.get_counting_engine()
+    if engine:
+        engine.remove_zone(zone_id)
     return jsonify({"ok": True})
 
 
@@ -2712,9 +2787,10 @@ def api_counting_remove_zone(cam_id, zone_id):
 def api_counting_add_line(cam_id):
     if not _camera_available():
         return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
-    engine, err, code = _get_counting_engine_or_none(cam_id)
-    if engine is None:
-        return err, code
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if cam is None:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
     data = request.json or {}
     required = ("x1", "y1", "x2", "y2")
     if not all(k in data for k in required):
@@ -2729,7 +2805,11 @@ def api_counting_add_line(cam_id):
         y2=float(data["y2"]),
         direction=data.get("direction", "both"),
     )
-    engine.add_line(line)
+    cam_key = getattr(cam, "_cam_key", cam.state.source)
+    _db.save_cam_line(cam_key, asdict(line))
+    engine = cam.get_counting_engine()
+    if engine:
+        engine.add_line(line)
     return jsonify({"ok": True, "line": asdict(line)})
 
 
@@ -2737,11 +2817,38 @@ def api_counting_add_line(cam_id):
 def api_counting_remove_line(cam_id, line_id):
     if not _camera_available():
         return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
-    engine, err, code = _get_counting_engine_or_none(cam_id)
-    if engine is None:
-        return err, code
-    engine.remove_line(line_id)
+    cm = _get_camera_manager()
+    cam = cm.get_camera(cam_id)
+    if cam is None:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
+    _db.delete_cam_line(line_id)
+    engine = cam.get_counting_engine()
+    if engine:
+        engine.remove_line(line_id)
     return jsonify({"ok": True})
+
+
+@app.route("/api/cameras/<int:camera_id>/config", methods=["PATCH"])
+def api_camera_update_config(camera_id):
+    """อัปเดตค่า inference config ของกล้องที่กำลังรันอยู่"""
+    if not _camera_available():
+        return jsonify({"ok": False, "error": "opencv-python not installed"}), 501
+    cm = _get_camera_manager()
+    cam = cm.get_camera(camera_id)
+    if not cam:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
+    data = request.json or {}
+    allowed = {"conf_threshold": float, "iou_threshold": float, "imgsz": int,
+                "device": str, "model_path": str, "fps_target": int}
+    updates = {}
+    for k, cast in allowed.items():
+        if k in data:
+            try:
+                updates[k] = cast(data[k])
+            except (ValueError, TypeError):
+                pass
+    cam.update_config(**updates)
+    return jsonify({"ok": True, "updated": list(updates.keys())})
 
 
 # ── Run ──────────────────────────────────────────────────────────────
