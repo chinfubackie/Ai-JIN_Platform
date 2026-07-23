@@ -3,7 +3,8 @@ import {
   Plus, Trash2, Play, Square, Camera, Settings, AlertCircle,
   CheckCircle2, Monitor, Wifi, WifiOff, RefreshCw, Download,
   TrendingUp, Target, SquareStack, Laptop, Cpu, Zap, PackageOpen,
-  RotateCcw, BrainCircuit, SlidersHorizontal,
+  RotateCcw, BrainCircuit, SlidersHorizontal, ChevronLeft, ChevronRight,
+  ChevronUp, ChevronDown,
 } from 'lucide-react'
 import VideoPlayer from '../components/VideoPlayer'
 import { api } from '../api/client'
@@ -86,6 +87,10 @@ export default function LiveStream() {
   const [exportStatus, setExportStatus] = useState(null) // null | 'loading' | {ok, output, error}
   const [resetting, setResetting] = useState(false)
   const [error, setError] = useState(null)
+
+  // แถบการตั้งค่าที่พับเก็บได้ — เปิดเป็นค่าเริ่มต้น
+  const [exportCollapsed, setExportCollapsed] = useState(false)
+  const [inferCollapsed, setInferCollapsed] = useState(false)
 
   // กล้องที่แท็บนี้กำลัง capture ให้ (ใช้ getUserMedia ของเครื่องผู้ใช้เอง)
   const [browserCaptureId, setBrowserCaptureId] = useState(null)
@@ -538,7 +543,10 @@ export default function LiveStream() {
         </div>
       )}
 
-      <div className="live-stream-layout">
+      <div
+        className="live-stream-layout"
+        style={{ '--export-col-w': exportCollapsed ? '48px' : '220px' }}
+      >
 
         {/* Left: Full-height video */}
         <div className="stream-panel">
@@ -818,112 +826,141 @@ export default function LiveStream() {
           {/* Section: Inference settings */}
           {selectedCamData && (
             <div className="sb-section sb-infer">
-              <div className="sb-header"><SlidersHorizontal size={14} /> Inference</div>
-              <div className="sb-infer-row">
-                <label>Conf <span className="infer-val">{localConf.toFixed(2)}</span></label>
-                <input type="range" min="0.05" max="0.95" step="0.05"
-                  value={localConf} onChange={e => setLocalConf(parseFloat(e.target.value))} />
+              <div className="sb-header">
+                <SlidersHorizontal size={14} /> Inference
+                <div className="sb-header-actions">
+                  <button
+                    className="sb-icon-btn"
+                    title={inferCollapsed ? 'ขยายแถบตั้งค่า' : 'พับเก็บแถบตั้งค่า'}
+                    onClick={() => setInferCollapsed(v => !v)}
+                  >
+                    {inferCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                  </button>
+                </div>
               </div>
-              <div className="sb-infer-row">
-                <label>IoU <span className="infer-val">{localIou.toFixed(2)}</span></label>
-                <input type="range" min="0.1" max="0.9" step="0.05"
-                  value={localIou} onChange={e => setLocalIou(parseFloat(e.target.value))} />
-              </div>
-              <div className="form-group">
-                <label>Model Size (imgsz)</label>
-                <select value={localImgsz} onChange={e => setLocalImgsz(parseInt(e.target.value))}>
-                  <option value={320}>320 (เร็ว)</option>
-                  <option value={480}>480</option>
-                  <option value={640}>640 (แนะนำ)</option>
-                  <option value={960}>960</option>
-                  <option value={1280}>1280 (ละเอียด)</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Device</label>
-                <select value={localDevice} onChange={e => setLocalDevice(e.target.value)}>
-                  {availableDevices.map(d => (
-                    <option key={d.id} value={d.id}>{d.type === 'cuda' ? '⚡ ' : ''}{d.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>โมเดล</label>
-                <select value={localModel} onChange={e => setLocalModel(e.target.value)}>
-                  <option value="">โมเดลที่ deploy ล่าสุด</option>
-                  {availableModels.map(m => (
-                    <option key={m.best_pt} value={m.best_pt}>{m.name || m.run}</option>
-                  ))}
-                </select>
-              </div>
-              <button className="btn btn-primary btn-sm" style={{ width: '100%' }}
-                disabled={applyingConfig} onClick={handleApplyConfig}>
-                <Settings size={12} /> {applyingConfig ? 'กำลังบันทึก...' : 'Apply'}
-              </button>
+              {!inferCollapsed && (
+                <>
+                  <div className="sb-infer-row">
+                    <label>Conf <span className="infer-val">{localConf.toFixed(2)}</span></label>
+                    <input type="range" min="0.05" max="0.95" step="0.05"
+                      value={localConf} onChange={e => setLocalConf(parseFloat(e.target.value))} />
+                  </div>
+                  <div className="sb-infer-row">
+                    <label>IoU <span className="infer-val">{localIou.toFixed(2)}</span></label>
+                    <input type="range" min="0.1" max="0.9" step="0.05"
+                      value={localIou} onChange={e => setLocalIou(parseFloat(e.target.value))} />
+                  </div>
+                  <div className="form-group">
+                    <label>Model Size (imgsz)</label>
+                    <select value={localImgsz} onChange={e => setLocalImgsz(parseInt(e.target.value))}>
+                      <option value={320}>320 (เร็ว)</option>
+                      <option value={480}>480</option>
+                      <option value={640}>640 (แนะนำ)</option>
+                      <option value={960}>960</option>
+                      <option value={1280}>1280 (ละเอียด)</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Device</label>
+                    <select value={localDevice} onChange={e => setLocalDevice(e.target.value)}>
+                      {availableDevices.map(d => (
+                        <option key={d.id} value={d.id}>{d.type === 'cuda' ? '⚡ ' : ''}{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>โมเดล</label>
+                    <select value={localModel} onChange={e => setLocalModel(e.target.value)}>
+                      <option value="">โมเดลที่ deploy ล่าสุด</option>
+                      {availableModels.map(m => (
+                        <option key={m.best_pt} value={m.best_pt}>{m.name || m.run}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button className="btn btn-primary btn-sm" style={{ width: '100%' }}
+                    disabled={applyingConfig} onClick={handleApplyConfig}>
+                    <Settings size={12} /> {applyingConfig ? 'กำลังบันทึก...' : 'Apply'}
+                  </button>
+                </>
+              )}
             </div>
           )}
 
         </div>{/* /sidebar */}
 
         {/* Right: Export panel */}
-        <div className="card export-panel">
-          <div className="card-title"><PackageOpen size={16} /> Export โมเดล</div>
-          <div className="form-group">
-            <label>โมเดล</label>
-            <select value={exportModel} onChange={e => setExportModel(e.target.value)}>
-              <option value="">best.pt (deploy อยู่)</option>
-              {availableModels.map(m => (
-                <option key={m.best_pt} value={m.best_pt}>{m.name || m.run} ({m.best_size_mb} MB)</option>
-              ))}
-            </select>
+        <div className={`card export-panel${exportCollapsed ? ' collapsed' : ''}`}>
+          <div className="card-title">
+            <PackageOpen size={16} />
+            {!exportCollapsed && <span>Export โมเดล</span>}
+            <button
+              className="panel-collapse-btn"
+              title={exportCollapsed ? 'ขยายแถบ Export' : 'พับเก็บแถบ Export'}
+              onClick={() => setExportCollapsed(v => !v)}
+            >
+              {exportCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+            </button>
           </div>
-          <div className="form-group">
-            <label>Format</label>
-            <select value={exportFormat} onChange={e => setExportFormat(e.target.value)}>
-              {exportFormats.length > 0 ? exportFormats.map(f => (
-                <option key={f.value} value={f.value}>{f.recommended ? '★ ' : ''}{f.label}</option>
-              )) : (
-                <>
-                  <option value="engine">★ TensorRT (NVIDIA GPU)</option>
-                  <option value="onnx">ONNX (ทั่วไป)</option>
-                  <option value="openvino">OpenVINO (Intel CPU)</option>
-                  <option value="tflite">TFLite (Mobile)</option>
-                </>
+          {!exportCollapsed && (
+            <>
+              <div className="form-group">
+                <label>โมเดล</label>
+                <select value={exportModel} onChange={e => setExportModel(e.target.value)}>
+                  <option value="">best.pt (deploy อยู่)</option>
+                  {availableModels.map(m => (
+                    <option key={m.best_pt} value={m.best_pt}>{m.name || m.run} ({m.best_size_mb} MB)</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Format</label>
+                <select value={exportFormat} onChange={e => setExportFormat(e.target.value)}>
+                  {exportFormats.length > 0 ? exportFormats.map(f => (
+                    <option key={f.value} value={f.value}>{f.recommended ? '★ ' : ''}{f.label}</option>
+                  )) : (
+                    <>
+                      <option value="engine">★ TensorRT (NVIDIA GPU)</option>
+                      <option value="onnx">ONNX (ทั่วไป)</option>
+                      <option value="openvino">OpenVINO (Intel CPU)</option>
+                      <option value="tflite">TFLite (Mobile)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Device</label>
+                <select value={exportDevice} onChange={e => setExportDevice(e.target.value)}>
+                  {availableDevices.map(d => (
+                    <option key={d.id} value={d.id}>{d.type === 'cuda' ? '⚡ ' : ''}{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <label className="fp16-label" style={{ marginTop: 2 }}>
+                <input type="checkbox" checked={exportHalf} onChange={e => setExportHalf(e.target.checked)} />
+                FP16 Half Precision
+              </label>
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ width: '100%', marginTop: 4 }}
+                disabled={exportStatus === 'loading'}
+                onClick={async () => {
+                  setExportStatus('loading')
+                  try {
+                    const r = await api.exportModelLocal({ model_path: exportModel, format: exportFormat, device: exportDevice, half: exportHalf })
+                    setExportStatus(r)
+                  } catch (e) {
+                    setExportStatus({ ok: false, error: String(e) })
+                  }
+                }}
+              >
+                <Zap size={13} /> {exportStatus === 'loading' ? 'กำลัง Export...' : 'Export'}
+              </button>
+              {exportStatus && exportStatus !== 'loading' && (
+                <div className={`export-result ${exportStatus.ok ? 'ok' : 'err'}`}>
+                  {exportStatus.ok ? <>✓ <code>{exportStatus.output}</code></> : <>✕ {exportStatus.error}</>}
+                </div>
               )}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Device</label>
-            <select value={exportDevice} onChange={e => setExportDevice(e.target.value)}>
-              {availableDevices.map(d => (
-                <option key={d.id} value={d.id}>{d.type === 'cuda' ? '⚡ ' : ''}{d.name}</option>
-              ))}
-            </select>
-          </div>
-          <label className="fp16-label" style={{ marginTop: 2 }}>
-            <input type="checkbox" checked={exportHalf} onChange={e => setExportHalf(e.target.checked)} />
-            FP16 Half Precision
-          </label>
-          <button
-            className="btn btn-primary btn-sm"
-            style={{ width: '100%', marginTop: 4 }}
-            disabled={exportStatus === 'loading'}
-            onClick={async () => {
-              setExportStatus('loading')
-              try {
-                const r = await api.exportModelLocal({ model_path: exportModel, format: exportFormat, device: exportDevice, half: exportHalf })
-                setExportStatus(r)
-              } catch (e) {
-                setExportStatus({ ok: false, error: String(e) })
-              }
-            }}
-          >
-            <Zap size={13} /> {exportStatus === 'loading' ? 'กำลัง Export...' : 'Export'}
-          </button>
-          {exportStatus && exportStatus !== 'loading' && (
-            <div className={`export-result ${exportStatus.ok ? 'ok' : 'err'}`}>
-              {exportStatus.ok ? <>✓ <code>{exportStatus.output}</code></> : <>✕ {exportStatus.error}</>}
-            </div>
+            </>
           )}
         </div>{/* /export-panel */}
 
